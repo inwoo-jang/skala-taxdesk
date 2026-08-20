@@ -1,0 +1,78 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.1.0'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.inwoo'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	springAiVersion = '2.0.0'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+	}
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// Phase 7 — 인증(계좌 소유자 격리·승인 게이트)과 도구 감사 Aspect
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+	// Phase 1~2 — ChatClient · 임베딩 · 벡터 스토어
+	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+	implementation 'org.springframework.ai:spring-ai-vector-store'
+	// QuestionAnswerAdvisor 는 Spring AI 2.0 에서 별도 아티팩트다
+	implementation 'org.springframework.ai:spring-ai-vector-store-advisor'
+	// Swagger UI — /swagger-ui.html
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.0'
+	compileOnly 'org.projectlombok:lombok'
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	// Phase 4 — 자사 계좌 금융소득·상담예약을 담을 인메모리 DB
+	runtimeOnly 'com.h2database:h2'
+	// Phase 8 — 토큰·지연·라우트 지표 노출
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'org.springframework.security:spring-security-test'
+	testCompileOnly 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+tasks.named('test') {
+	testLogging {
+		showStandardStreams = true
+		events 'passed', 'failed'
+	}
+	useJUnitPlatform {
+		// 골든셋 평가는 모델을 호출한다. 기본 test 에서 빼고 ./gradlew test -Peval 로만 돈다.
+		if (!project.hasProperty('eval')) {
+			excludeTags 'eval'
+		}
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+	options.compilerArgs << '-Xlint:deprecation'
+}

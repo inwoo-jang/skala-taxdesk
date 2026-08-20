@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SKALA증권 세무상담 데스크</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --line: #e2e5ea; --text: #1a1d21;
+    --muted: #6b7280; --accent: #1f4b8e; --mine: #1f4b8e; --code: #f1f3f6;
+    --warn: #8a5a00; --warn-bg: #fff7e6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 20px;
+           display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .sub { font-size: 13px; color: var(--muted); }
+  header .who { margin-left: auto; font-size: 13px; color: var(--muted); }
+
+  .layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; padding: 16px;
+            max-width: 1400px; margin: 0 auto; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .panel > h2 { font-size: 13px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line);
+                color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+
+  #log { height: calc(100vh - 230px); min-height: 320px; overflow-y: auto; padding: 16px; }
+  .msg { margin-bottom: 14px; display: flex; }
+  .msg.me { justify-content: flex-end; }
+  .bubble { max-width: 82%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap;
+            word-break: break-word; }
+  .me .bubble { background: var(--mine); color: #fff; }
+  .bot .bubble { background: var(--code); }
+  .bot .bubble .cite { display: block; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .disclaimer { font-size: 12px; color: var(--warn); background: var(--warn-bg);
+                border: 1px solid #f0dcb4; border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+
+  form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+  input[type=text] { flex: 1; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+                     font: inherit; }
+  button { padding: 10px 16px; border: 0; border-radius: 8px; background: var(--accent); color: #fff;
+           font: inherit; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .meta { padding: 14px 16px; font-size: 13px; }
+  .meta .empty { color: var(--muted); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px;
+           background: var(--code); color: var(--accent); font-weight: 600; }
+  .meta section { margin-bottom: 16px; }
+  .meta h3 { font-size: 12px; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  .meta ol, .meta ul { margin: 0; padding-left: 18px; }
+  .meta li { margin-bottom: 3px; }
+  .steps { background: var(--code); border-radius: 8px; padding: 10px 12px; font-size: 13px;
+           font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+  .total { margin-top: 8px; font-weight: 700; font-size: 15px; }
+  .kv { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+
+  .examples { padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+  .examples h3 { font-size: 12px; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .examples button { background: #fff; color: var(--accent); border: 1px solid var(--line);
+                     font-size: 12px; padding: 5px 10px; margin: 0 6px 6px 0; border-radius: 999px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SKALA증권 세무상담 데스크</h1>
+  <span class="sub">금융소득 종합과세 예상 안내 · 2026 귀속</span>
+  <span class="who" id="who">로그인 필요</span>
+</header>
+
+<div class="layout">
+
+  <div class="panel">
+    <h2>상담</h2>
+    <div id="log">
+      <div class="msg bot"><div class="bubble">안녕하세요. SKALA증권 세무상담 데스크입니다.
+금융소득(이자·배당) 종합과세 여부와 예상 세액을 안내해 드립니다.
+
+저희가 조회할 수 있는 것은 <b>SKALA증권 계좌</b>뿐입니다. 타사 금융소득이나 근로소득은
+말씀해 주시면 합산해서 계산해 드리겠습니다.<span class="cite">[출처: 09-상담범위-안내.md · SKALA증권 고객센터 운영지침]</span></div></div>
+    </div>
+
+    <div class="examples">
+      <h3>이렇게 물어보세요 — 각 버튼이 라우터의 서로 다른 분기를 탑니다</h3>
+      <button data-q="금융소득이 2천만원을 넘으면 어떻게 되나요?">규정 (RAG)</button>
+      <button data-q="이자 1200만원 배당 900만원이면 세금 얼마인가요?">계산 (Tool)</button>
+      <button data-q="저 2026년에 종합과세 대상인가요?">판정 (RAG+Tool)</button>
+      <button data-q="세무사 상담 예약해 주세요">예약 (승인 게이트)</button>
+      <button data-q="양도소득세는 얼마나 나오나요?">범위 밖 (거절)</button>
+      <button data-q="다른 증권사 계좌 배당도 조회해 주세요">권한 밖 (거절+대안)</button>
+    </div>
+
+    <form id="f">
+      <input type="text" id="q" placeholder="질문을 입력하세요" autocomplete="off" required>
+      <button type="submit" id="send">보내기</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>이 답변의 근거 — 무엇을 보고 어떻게 계산했나</h2>
+    <div class="meta" id="meta">
+      <p class="empty">질문을 보내면 이 답변이 인용한 조문, 호출한 도구, 계산 전개 과정이 여기에 표시됩니다.<br><br>
+      이 패널이 이 프로젝트의 주장입니다 — <b>근거와 계산을 둘 다 증명한다.</b></p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// 이 화면은 백엔드가 만드는 AnswerDto 를 그대로 펼쳐 보인다.
+// 답변 문장만 보여주면 "근거로 답했는지"를 눈으로 확인할 수 없기 때문이다.
+// TODO Phase 6 — /chat/stream (SSE) 로 전환. 지금은 /chat (비스트리밍) 을 쓴다.
+
+const log = document.getElementById('log');
+const meta = document.getElementById('meta');
+const form = document.getElementById('f');
+const input = document.getElementById('q');
+const send = document.getElementById('send');
+const conversationId = 'web-' + Math.random().toString(36).slice(2, 10);
+
+document.querySelectorAll('.examples button').forEach(b => {
+  b.addEventListener('click', () => { input.value = b.dataset.q; input.focus(); });
+});
+
+function bubble(who, text) {
+  const row = document.createElement('div');
+  row.className = 'msg ' + who;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.textContent = text;
+  row.appendChild(b);
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+  return b;
+}
+
+const won = n => (n ?? 0).toLocaleString('ko-KR') + '원';
+
+function renderMeta(a) {
+  const parts = [];
+  parts.push(`<section><span class="badge">${a.route ?? '-'}</span></section>`);
+
+  if (a.citations?.length) {
+    parts.push('<section><h3>인용한 근거</h3><ul>' + a.citations.map(c =>
+      `<li>${c.article ?? ''} <span style="color:var(--muted)">· ${c.doc ?? ''}` +
+      (c.score != null ? ` (${c.score.toFixed(2)})` : '') + '</span></li>').join('') + '</ul></section>');
+  }
+
+  if (a.toolCalls?.length) {
+    parts.push('<section><h3>호출한 도구</h3><ul>' + a.toolCalls.map(t =>
+      `<li><code>${t.name}</code><br><span style="color:var(--muted);font-size:12px">${t.args ?? ''}</span></li>`
+    ).join('') + '</ul></section>');
+  }
+
+  // 계산 전개 — 모델이 지어낸 숫자가 아니라 도구가 반환한 steps[] 를 그대로 보여준다.
+  if (a.calculation?.steps?.length) {
+    parts.push('<section><h3>계산 전개 (도구 결과)</h3><div class="steps">' +
+      a.calculation.steps.map(s => s.replace(/</g, '&lt;')).join('<br>') + '</div>' +
+      `<div class="total">결정세액 ${won(a.calculation.total)}</div>` +
+      (a.calculation.localTax ? `<div class="kv"><span>지방소득세(별도)</span><span>${won(a.calculation.localTax)}</span></div>` : '') +
+      '</section>');
+  }
+
+  const kv = [];
+  if (a.tokens) kv.push(`<div class="kv"><span>토큰</span><span>prompt ${a.tokens.prompt} · completion ${a.tokens.completion}</span></div>`);
+  if (a.latencyMs != null) kv.push(`<div class="kv"><span>지연</span><span>${a.latencyMs}ms</span></div>`);
+  if (kv.length) parts.push('<section>' + kv.join('') + '</section>');
+
+  // OUT_OF_SCOPE 는 주 모델을 부르지 않는다. 토큰 0 이 그 증거다.
+  if (a.route === 'OUT_OF_SCOPE') {
+    parts.push('<section><div class="disclaimer">상담 범위 밖으로 판정되어 <b>주 모델을 호출하지 않았습니다.</b> 위 토큰 수치를 확인하세요.</div></section>');
+  }
+
+  meta.innerHTML = parts.join('') || '<p class="empty">표시할 메타데이터가 없습니다.</p>';
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = input.value.trim();
+  if (!q) return;
+
+  bubble('me', q);
+  input.value = '';
+  send.disabled = true;
+  const out = bubble('bot', '…');
+
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ question: q, conversationId })
+    });
+
+    if (res.status === 401) { out.textContent = '로그인이 필요합니다. /swagger-ui.html 에서 로그인한 뒤 다시 시도하세요.'; return; }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      out.textContent = (err.message || '오류가 발생했습니다.') + (err.traceId ? ` (traceId: ${err.traceId})` : '');
+      return;
+    }
+
+    const a = await res.json();
+    out.textContent = a.answer ?? '';
+    if (a.disclaimer) {
+      const d = document.createElement('div');
+      d.className = 'disclaimer';
+      d.textContent = a.disclaimer;
+      out.appendChild(d);
+    }
+    renderMeta(a);
+  } catch (err) {
+    out.textContent = '서버에 연결하지 못했습니다: ' + err.message;
+  } finally {
+    send.disabled = false;
+    input.focus();
+    log.scrollTop = log.scrollHeight;
+  }
+});
+
+// 로그인 상태 표시 — Basic 인증이라 /chat 401 여부로 판단한다.
+fetch('/chat', { method: 'POST', headers: {'Content-Type':'application/json'},
+                 credentials: 'include', body: '{"question":"","conversationId":"probe"}' })
+  .then(r => { document.getElementById('who').textContent = r.status === 401 ? '로그인 필요' : '로그인됨'; })
+  .catch(() => {});
+</script>
+</body>
+</html>

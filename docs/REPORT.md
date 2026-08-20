@@ -1,0 +1,414 @@
+# 최종 실습 보고서 — SKALA증권 세무상담 데스크
+
+> 교재 13장 종합실습. 큰 주제 **HelpDesk AI** 를 유지하되, 과제 표준 골격의 Phase 1~8 을
+> **금융소득 종합과세 예상 안내** 라는 하나의 문제에 맞춰 채운다.
+> 기획 원문은 [PLAN.md](PLAN.md), 작업 기록은 [BUILD-LOG.md](BUILD-LOG.md),
+> 실험 설계는 [EXPERIMENTS.md](EXPERIMENTS.md).
+
+| 항목 | 값 |
+|---|---|
+| 프로젝트 | `final` — SKALA증권 고객센터 세무상담 데스크 |
+| 루트 패키지 | `com.inwoo.taxdesk` |
+| 스택 | Spring Boot 4.1.0 · Spring AI 2.0.0 · Java 21 · H2 · Micrometer |
+| 한 줄 주장 | **LLM 에게 산수를 시키지 않는다. 대신 근거와 계산을 둘 다 증명한다.** |
+
+---
+
+## 1. PRD
+
+### 1.1 무엇을 만드는가
+
+증권사 고객이 자기 **금융소득(이자·배당)** 이 종합과세 대상인지, 대상이면 세금이 얼마쯤 나오는지를
+물어보면, **법령 근거(RAG)** 와 **계산 전개(Tool)** 를 함께 제시해 답하는 상담 데스크.
+
+### 1.2 누가 운영하고 누가 쓰는가
+
+- **운영 주체**: 가상의 증권사 `SKALA증권`
+- **사용자**: 자사 계좌를 보유한 개인 고객 / 승인 담당 운영자(ADMIN)
+- **실존 모델**: 증권사들이 연말에 보내는 "금융소득 종합과세 대상 예상 안내"
+
+### 1.3 사용자 스토리
+
+| # | 누가 | 무엇을 묻고 | 무엇이 필요한가 | 경로 |
+|---|---|---|---|---|
+| US-1 | 고객 | "금융소득 2천만원 넘으면 어떻게 되나요?" | 법령 근거 + 조문 출처 | REGULATION (RAG) |
+| US-2 | 고객 | "제 2026년 이자·배당 얼마죠?" | 자사 계좌 내역 조회 | CALCULATION (Tool) |
+| US-3 | 고객 | "그럼 저 종합과세 대상이에요?" | 근거 + 판정 계산 | **HYBRID (RAG+Tool)** |
+| US-4 | 고객 | "세금은 얼마나 나와요? 근로소득 5천 있어요" | 비교과세 산출 + 앞 턴 금액 | HYBRID + Memory |
+| US-5 | 고객 | "세금 줄일 방법 없나요?" | 절세상품 안내 + **자격확인 신청** | ACTION |
+| US-6 | 고객 | "타사 계좌 배당도 합쳐줘요" | 한계 고지 + 수동 입력 유도 | OUT_OF_SCOPE(권한 밖) |
+| US-7 | 고객 | "양도세는 얼마예요?" | 업무 범위 밖 거절 | OUT_OF_SCOPE(범위 밖) |
+| US-7b | 고객 | "이 주식 오를까요?" | **투자자문 거절** (자본시장법) | OUT_OF_SCOPE(투자자문) |
+| US-8 | 운영자 | "어제 토큰이 왜 늘었지?" | 토큰·지연·도구 호출 지표 | Actuator/Prometheus |
+
+US-3 이 이 프로젝트의 존재 이유다. 문서만으로도, 계산만으로도 답이 나오지 않는다.
+
+| | 문서만 있으면 | 계산만 있으면 |
+|---|---|---|
+| "배당소득 세율이 뭔가요?" | 답 가능 | 답 불가 |
+| "이자 1,200 배당 900이면 세금 얼마?" | 답 불가 | 답 가능 |
+| **"저 종합과세 대상인가요?"** | **답 불가** | **답 불가** |
+
+### 1.4 기능 요구사항
+
+| ID | 요구사항 | 관련 Phase |
+|---|---|---|
+| FR-1 | 규정 답변에는 **조문 단위 출처**(`소득세법 §14③ (2026 귀속)`)를 반드시 붙인다 | 2·3 |
+| FR-2 | 금액·세액은 **도구 결과만** 사용한다. 모델의 직접 계산 금지 | 4 |
+| FR-3 | 질문을 5분기로 라우팅하고, `OUT_OF_SCOPE` 는 **주 모델을 호출하지 않는다** | 3 |
+| FR-4 | 자사 계좌 조회는 **소유자 조건이 쿼리에** 들어간다 (프롬프트 아님) | 4·7 |
+| FR-5 | 세액 계산은 비교과세 ①② 를 **둘 다** 산출하고 큰 값을 택한다 | 4 |
+| FR-5b | 결정세액에서 멈추지 않고 **기납부세액을 차감한 납부할세액(음수면 환급)** 까지 제시한다 | 4 |
+| FR-6 | 계산 도구는 숫자가 아니라 **`steps[]`(전개 과정)** 을 함께 반환한다 | 4 |
+| FR-7 | 3턴 이상 맥락을 유지한다 ("그럼 저는요?") | 5 |
+| FR-8 | REST + SSE 스트리밍, 구조화 응답(`AnswerDto`), 단일 HTML 데모 화면 | 6 |
+| FR-9 | 절세상품 자격확인 신청은 `PENDING` 까지만. **승인·거절 모두** ADMIN 경로 | 7 |
+| FR-10 | 답변 말미에 "예상 안내이며 최종 판단은 세무 전문가" 고정 문구 | 1·7 |
+
+### 1.5 비기능 요구사항
+
+| ID | 요구사항 | 측정 |
+|---|---|---|
+| NFR-1 | 비스트리밍 P95 5초 이내 | 부하 테스트 |
+| NFR-2 | 질의당 평균 토큰 상한 준수 | `taxdesk.tokens` 카운터 |
+| NFR-3 | 타인 계좌 조회 차단 | 레드팀 10종 전건 |
+| NFR-4 | 주 모델 장애 시 응답 지속 | 폴백 ChatClient + 장애 주입 |
+| NFR-5 | 주민번호·계좌번호 평문 미유출 | `Masker` + 로그 검사 |
+| NFR-6 | **세액 hallucination 0건** | 골든셋 계산 항목 완전 일치 |
+
+### 1.6 스코프 — 자르는 것이 설계다
+
+**다룬다**: 자사 계좌의 이자·배당, 2,000만원 초과 판정, 비교과세, Gross-up, 배당세액공제, 지방소득세.
+타사 금융소득·근로소득은 **고객이 입력하는 숫자**(`otherIncome`, `externalAmount`)로만 받는다.
+
+**다루지 않는다**(명시적 거절): 양도·사업·부동산임대·퇴직소득 / 타사 계좌 실시간 조회 /
+인적공제 상세 / 실제 신고 대리(세무사법 §2) / 세액 정확도 보증.
+
+---
+
+## 2. 왜 이 도메인인가
+
+### 2.1 RAG 와 Tool 을 둘 다 제대로 쓰는 문제를 찾고 싶었다
+
+교재의 부품은 정해져 있다 — RAG, Tool, Advisor, 메모리. 문제는 **그 부품들이 서로 협력하는
+문제를 고르지 못하면 실습이 부품 나열로 끝난다**는 것이다.
+practice3 의 "주문 조회"는 사실상 DB SELECT 라 Tool 이 있어도 되고 없어도 된다.
+RAG 로 정책 문서를 찾는 것과 Tool 로 주문을 꺼내오는 것 사이에 의존 관계가 없다.
+
+금융소득 과세 상담은 그 지점이 달랐다.
+
+| | 문서만 있으면 | 계산만 있으면 |
+|---|---|---|
+| "배당소득 세율이 뭔가요?" | 답 가능 | 답 불가 |
+| "이자 1,200 배당 900이면 세금 얼마?" | 답 불가 | 답 가능 |
+| **"저 종합과세 대상인가요?"** | **답 불가** | **답 불가** |
+
+세 번째 줄이 이 도메인을 고른 이유다. 법령에서 기준(2,000만원)의 **근거**를 찾아오고(RAG),
+그 기준으로 **계산**해야(Tool) 비로소 답이 된다. 둘 중 하나만으로는 문장이 완성되지 않는다.
+이런 질문이 중심에 있어야 RAG 와 Tool 을 "둘 다 써 봤다"가 아니라 **"둘이 협력하게 만들었다"**
+가 된다. 그것이 `HYBRID` 라우트이고, 이 프로젝트에서 가장 공들인 부분이다.
+
+세법 도메인이 여기에 잘 맞는 이유가 몇 가지 더 있었다.
+
+| 실습 요소 | 이 도메인에서 자연스럽게 나오는 형태 |
+|---|---|
+| RAG 출처 품질 | 파일명이 아니라 **조문 번호**까지 가야 출처로 인정된다 |
+| Tool 의 필요성 | 세액은 검색으로 못 구한다. 계산해야만 나온다 |
+| 안전·거절 | 세무사법이라는 **외부 근거**가 있는 거절 |
+| 권한 격리 | 남의 계좌 금융소득 = 실제로 새면 안 되는 데이터 |
+| 승인 게이트 | 상담 예약 확정은 사람이 한다 |
+| **평가 가능성** | **세액은 정답이 하나다.** 문장 유사도가 아니라 완전 일치로 채점된다 |
+
+마지막 줄이 특히 컸다. LLM 실습에서 정답이 숫자로 딱 떨어지는 과제는 흔치 않다.
+덕분에 이 프로젝트의 목표를 "그럴듯한 답"이 아니라 **"세액 hallucination 0건"** 이라는
+기계로 판정 가능한 문장으로 쓸 수 있었다.
+
+### 2.2 서비스 주체는 증권사로 정했다
+
+같은 기능도 누가 운영하느냐에 따라 답할 수 있는 범위가 달라진다.
+증권사로 정하고 나니 설계상 애매하던 것들이 자연스럽게 풀렸다.
+
+- **모르는 것을 모른다고 말할 수 있다.** 증권사는 자사 계좌만 안다.
+  타사 금융소득과 근로·사업소득을 고객에게 물어보는 것이 어색하지 않다.
+- **면책에 근거가 생긴다.** 세무사법 §2 상 증권사는 세무대리를 할 수 없다.
+  "예상 안내이며 최종 판단은 세무 전문가"가 예의상 붙인 문구가 아니라 법적 제약이 된다.
+- **거절이 정직해진다.** 금융소득 외에는 업무 범위도 데이터도 없으므로,
+  양도세 질문을 거절하는 것이 회피가 아니라 사실 진술이 된다.
+
+실존하는 서비스이기도 하다 — 증권사들이 연말에 보내는
+"금융소득 종합과세 대상 예상 안내"가 이 프로젝트의 모델이다.
+
+그 결과 `OUT_OF_SCOPE` 가 **세 갈래**로 갈라졌고, 각각 근거 조문이 다르다.
+
+| 갈래 | 예 | 응답 | 근거 |
+|---|---|---|---|
+| 권한 밖 · 합산 가능 | 타사 계좌, 사업·근로소득 | 거절 + **금액 주시면 합산** | §14② 종합소득 |
+| 진짜 범위 밖 · 합산 불가 | 양도·퇴직소득 | 거절 (대안 없음) | §14① **분류과세** |
+| 법적 제약 · 세무 | 신고 대리 | 거절 + 절세상품 안내로 전환 | 세무사법 §2 |
+| 법적 제약 · 투자 | **"이 주식 오를까요?"** | 거절 (대안 없음) | **자본시장법** 투자자문업 등록 |
+
+마지막 줄이 증권사를 고른 부수 효과다. **법적 울타리가 둘**이 된다 —
+세무사법(세무대리 불가)과 자본시장법(투자자문 불가). 세무 데스크인데 증권사가 운영한다는
+사실 자체가 거절의 근거를 두 배로 만든다. 그리고 두 울타리 사이에 **할 수 있는 일**이 하나 남는다:
+자사 절세상품의 **세제 혜택 안내**와 **가입 자격 확인 신청** — 그것이 `ACTION` 라우트다.
+
+양도·퇴직을 거절하는 이유가 "우리가 몰라서"가 아니라 **"법적으로 합산 대상이 아니어서"** 라는 것,
+그리고 앞의 두 갈래에는 **대안이 반드시 붙는다는 것**이 이 설계의 요지다.
+대안 없는 거절은 응대가 아니라 그냥 거절이다.
+
+### 2.3 [personal TMI]
+
+실무에서 세무회계법인과 AI 챗봇 설계 회의에 참여한 적이 있다.
+당시 'RAG', 'VECTOR' 같은 단어 앞에서 하나도 못 알아들으면서도 당황하지 않으려 애썼던 기억이 있다.
+기획도 어설프게 했던 아쉬움이 남아, 이번에는 **내 도메인 지식을 활용할 수 있는 주제**를 골랐다.
+
+그때 못 알아들었던 단어들이 이번 실습의 목차가 됐다는 점이 이 프로젝트를 고른
+개인적인 이유이기도 하다.
+
+
+## 3. 아키텍처
+
+```
+고객 / 운영자
+   ├─ static/index.html   SSE 채팅 · 출처 · 계산 전개 시각화
+   └─ swagger-ui.html     계정 전환 → 소유자 격리 시연
+   ▼
+web/     ChatController(REST·SSE) · AdminController(인제스트·승인) · SecurityConfig
+   ▼
+chat/    TaxDeskService ── QueryRouter(5분기) ── 출처·계산 병합 → AnswerDto
+   ▼
+AI 계층  ChatClient
+           └ Advisor 체인  Audit(0) → Safety(100) → Memory(200) → QA(300) → TokenMeter(900)
+   ├── 근거   rag/         VectorStore ← IngestService (조문 메타)
+   ├── 행동   tools/       AccountIncomeTools · TaxCalcTools · ConsultationTools
+   ├── 데이터 repository/  소유자 조건이 들어간 쿼리
+   └── 운영   advisor/ eval/  감사 · 계측 · 폴백 · 골든셋
+```
+
+라우터가 이 프로젝트의 고유 설계 포인트다. **어떤 부품을 부를지를 모델에게 매번 맡기지 않는다.**
+
+```
+질문 → QueryRouter
+ ├ REGULATION   규정 질문   → RAG only              "배당소득세율이 뭔가요?"
+ ├ CALCULATION  금액 계산   → Tool only             "이자 1200 배당 900이면?"
+ ├ HYBRID       판정 필요   → RAG + Tool            "저 종합과세 대상인가요?"
+ ├ ACTION       예약·신청   → Tool + 승인 게이트     "세무사 상담 예약이요"
+ └ OUT_OF_SCOPE 범위 밖     → 즉시 거절 (모델 호출 X) "양도세는 얼마예요?"
+```
+
+> **주의(설계 불변식)**: HYBRID 라도 RAG 근거에서 기준값(2,000만원)을 **파싱해 Tool 입력으로 넘기지 않는다.**
+> 기준은 설정(`taxdesk.threshold-amount`)에 있고, RAG 는 그 기준의 **근거 문서**를 제시할 뿐이다.
+> 이 분리가 무너지면 "문서를 잘못 읽으면 세금이 틀리는" 구조가 된다.
+
+---
+
+## 4. Phase 1~8 — 과제 표준 골격을 어떻게 가져갔는가
+
+### 4.1 골격 대응표
+
+과제 표준 골격(왼쪽)의 자리마다 무엇이 들어갔는지, 그리고 **무엇이 추가됐는지**.
+
+| 과제 골격 | final 구현 | 관계 |
+|---|---|---|
+| `HelpDeskApplication` | `TaxDeskApplication` | 이름만 |
+| `config/AiConfig` | `config/AiConfig` | 동일 + **폴백 ChatClient**, **라우터 ChatClient** 추가 |
+| `config/HelpDeskProperties` | `config/TaxDeskProperties` | 동일 + **누진세율표를 설정으로** (`brackets[0..7]`) |
+| — | `config/DataSeeder` | **추가** — 골든셋 기대값과 짝을 이루는 계좌 시드 |
+| `web/ChatController` | `web/ChatController` | 동일 + SSE |
+| `web/AdminController` | `web/AdminController` | 동일 (인제스트 + 상담 승인) |
+| `web/SecurityConfig` | `web/SecurityConfig` | 동일 (USER/ADMIN) |
+| `chat/HelpDeskService` | `chat/TaxDeskService` | 동일 |
+| `chat/AnswerDto` | `chat/AnswerDto` | 동일 + `citations.article`, **`calculation.steps[]`** |
+| — | `chat/QueryRouter` · `chat/Route` | **추가 — 이 프로젝트의 고유 설계 포인트** |
+| `repository/OrderRepository` | `repository/AccountIncomeRepository` · `ProductApplicationRepository` | 소유자 조건 강제 |
+| `rag/IngestService` | `rag/IngestService` · `rag/DocumentMeta` | 동일 + **조문·귀속연도 메타** |
+| `tools/OrderTools` | `tools/AccountIncomeTools` | 동일 축 (내 데이터 조회) |
+| `tools/TicketTools` | `tools/ProductApplicationTools` | 동일 축 (승인 게이트) · 거절 경로 추가 |
+| — | `tools/TaxCalcTools` | **추가 — 이 프로젝트의 하이라이트** |
+| `advisor/AuditAdvisor` | `advisor/AuditAdvisor` · `tools/ToolAuditAspect` | 대화 + 도구 **2층 감사** |
+| `advisor/TokenMeterAdvisor` | `advisor/TokenMeterAdvisor` | 동일 + `route` 태그 |
+| — | `advisor/SafetyAdvisor` · `advisor/Masker` | practice3 에서 이식·확장 (주민번호·계좌번호) |
+| `eval/GoldenSet` | `eval/GoldenSet` · `eval/EvalService` | 동일 + **계산 채점기** |
+
+정리하면 **골격은 그대로 두고 세 곳을 늘렸다** — 라우터(`chat/`), 계산 도구(`tools/TaxCalcTools`),
+계산 채점기(`eval/`). 나머지는 도메인만 갈아 끼운 것이다. 늘린 세 곳이 곧 보고서에서 주장할 부분이다.
+
+### 4.2 Phase별 계획
+
+각 Phase 는 **목표 / 산출물 / 표준 골격 대비 확장 / 완료 판정(DoD) / 보고서에 넣을 증거** 로 적는다.
+
+---
+
+#### Phase 1 — 뼈대와 Advisor 조립 `config/`
+
+- **목표**: ChatClient 조립, Advisor 체인 순서 확정, 임계값 전면 외부화
+- **산출물**: `AiConfig`(주 ChatClient · 라우터 ChatClient · 폴백 ChatClient · ChatMemory), `TaxDeskProperties`
+- **체인**: `Audit(0) → Safety(100) → Memory(200) → QA(300) → TokenMeter(900)`
+- **시스템 프롬프트 고정 규칙 5**: ①[근거] 안에서만 답한다 ②`[출처: 문서 · 조문]` ③**금액은 도구 결과만**
+  ④조회 범위는 SKALA증권 계좌 한정 ⑤말미 면책 문구
+- **확장**: 표준 골격에는 ChatClient 가 1개다. 여기서는 3개 — 주/라우터/폴백. 라우터를 저비용 모델로 분리한 것이
+  Phase 3 의 비용 절감 근거가 되고, 폴백은 Phase 8 NFR-4 의 근거가 된다.
+- **DoD**: 앱 기동 + `/actuator/health` 200, `AdvisorOrderTest` 통과
+- **증거**: 체인 순서 로그, 설정 키 목록
+
+#### Phase 2 — RAG 인제스트 `rag/` + 세법 문서 9종
+
+- **목표**: 세법 요약 문서 → 조문 경계 청크 → 벡터, **조문 단위 메타데이터** 부여
+- **산출물**: `IngestService`, `DocumentMeta(doc, article, effectiveYear, kind)`, `tax-docs/*.md` 본문
+- **청크 전략**: 헤딩(조문) 경계 우선 분할, 400자 목표 / 최소 50자
+- **확장**: 출처가 "파일명"이 아니라 **"소득세법 §14③ (2026 귀속)"**. 세법 답변에서 파일명은 출처가 아니다.
+- **선행 조건**: 문서 본문 작성이 Phase 2 코드보다 **먼저**다. 특히 04번(세율표)은
+  `taxdesk.brackets` 와 값이 완전히 같아야 한다 — 골든셋이 그 일치를 검증한다.
+- **DoD**: 인제스트 후 청크 수 리포트 + **조문 메타 누락 0건**
+- **증거**: 인제스트 리포트, 문서↔설정 세율표 일치 테스트
+
+#### Phase 3 — 라우터와 REGULATION 경로 `chat/`
+
+- **목표**: 5분기 라우팅 + 규정 답변 경로 완성(출처 강제)
+- **산출물**: `QueryRouter`(모델 1회 분류 + 규칙 폴백), `Route`, `TaxDeskService.ask()`
+- **확장**: 표준 골격에 없는 계층이다. `OUT_OF_SCOPE` 는 **주 모델을 아예 호출하지 않아** 비용과 안전을
+  같은 지점에서 막는다. 거절 두 갈래(범위 밖 / 권한 밖)를 여기서 갈라 문구를 고른다.
+- **DoD**: 규정 질문 10건 전부 출처 포함 / OUT_OF_SCOPE 질문에 **주 모델 호출 0회 · 토큰 0**
+- **증거**: 라우팅 혼동행렬, 라우트별 토큰 비교표 → [실험 E1](EXPERIMENTS.md)
+
+#### Phase 4 — 도구와 데이터 `tools/` `repository/` `domain/`
+
+- **목표**: CALCULATION · HYBRID 경로 완성
+- **도구 4종**
+
+| 도구 | 입력 | 출력 | 비고 |
+|---|---|---|---|
+| `lookupMyAccountIncome` | year | 이자·배당·원천징수세액·상품별 내역 | **소유자 격리**, 자사 한정 |
+| `classifyTaxation` | interest, dividend, externalAmount | 분리/종합 판정 + 초과액 + 적용 기준 | 기준값은 설정에서 |
+| `calculateTax` | financialIncome, otherIncome, deduction, **prepaidTax** | 비교과세 ①② 전개 + 결정세액 + 지방세 + **납부할세액/환급액** | **`steps[]` 동봉** |
+| `estimateDueDate` | year | 신고·납부 기한, 가산세 | |
+
+- **확장 ①**: `calculateTax` 는 숫자만 반환하지 않고 **계산 전개 `steps[]`** 를 함께 준다.
+  모델은 그것을 **인용만** 한다 → hallucination 을 줄이는 게 아니라 발생 지점을 없앤다.
+- **확장 ②**: `lookupMyAccountIncome` 에는 **타사를 넣을 파라미터가 아예 없다.**
+  "타사는 조회하지 마"를 프롬프트로 부탁하는 대신 부를 수 없게 만든다.
+- **확장 ③**: `externalAmount` 는 계산 전개에 **"고객 제공"** 으로 표시된다 —
+  어디까지가 우리가 확인한 값인지 답변에서 구분돼야 한다.
+- **DoD**: 경계값(1,999만 / 2,000만 / 2,001만) 단위 테스트, 비교과세 ①<② 케이스, ISA 제외, 최고 구간(`up-to=0`)
+- **증거**: `TaxCalcToolsTest` 결과표 → [실험 E4](EXPERIMENTS.md)
+
+#### Phase 5 — 메모리와 멀티턴 `chat/`
+
+- **목표**: "그럼 저는요?" / "근로소득 5천이면요?" 가 동작
+- **산출물**: `MessageWindowChatMemory(memoryWindow)`, `conversationId` 기반 세션 분리
+- **확장**: Safety(100)를 Memory(200) **앞**에 두는 이유를 실험으로 보인다.
+  `taxdesk.safety-order` 를 100↔250 으로 바꾸면 차단된 문장이 기억에 남는 것이 **눈에 보인다.**
+- **DoD**: 3턴 시나리오 5종 통과, **다른 고객 세션 간 정보 누출 0건**
+- **증거**: 대화 로그 5종 → [실험 E5·E7](EXPERIMENTS.md)
+
+#### Phase 6 — API · 스트리밍 · 화면 `web/` `static/`
+
+- **목표**: REST + SSE + 구조화 응답 + 단일 HTML 데모
+- **산출물**: `ChatController`(`POST /chat`, `GET /chat/stream`), `AnswerDto`, `index.html`
+- **`AnswerDto`**: `{ route, answer, citations[{doc,article,score}], toolCalls[], calculation{steps[],total,localTax,prepaidTax,payable}, tokens, latencyMs, disclaimer }`
+- **확장**: 답변 문장만 돌려주면 "근거로 답했는지"를 밖에서 검증할 수 없다. 구조화 응답이 있어야
+  "도구 호출 로그 없는 금액 언급 = 실패"를 **기계로 판정**할 수 있다. 화면은 그 필드를 그대로 펼쳐 보인다 —
+  "근거와 계산을 둘 다 증명한다"는 주장을 눈으로 보여주는 것이 화면의 목적이다.
+- **미결정**: SSE 를 MVC 로 갈지 WebFlux 를 추가할지 (현재 `index.html` 은 비스트리밍 `/chat` 사용)
+- **DoD**: TTFT 측정, 비스트리밍 P95 5초 이내
+- **증거**: 화면 캡처(출처·도구·계산 전개 패널), TTFT 비교 → [실험 E10](EXPERIMENTS.md)
+
+#### Phase 7 — 보안 · 승인 게이트 · 감사
+
+- **목표**: 프롬프트가 아니라 **코드가 강제하는** 통제
+- **산출물**: `SecurityConfig`, `SafetyAdvisor`, `Masker`, `ToolAuditAspect`, `AdminController` 승인 경로
+- **네 층**
+  1. **권한 격리** — 타인 계좌 조회는 **쿼리 레벨**에서 불가 (`findByOwnerIdAndYear`)
+  2. **승인 게이트** — `ConsultationTools.request()` 는 `PENDING` 까지. 확정은 `POST /admin/consultations/{id}/approve`
+  3. **입력 안전** — 길이 상한, 인젝션 패턴, 주민번호·계좌번호 마스킹
+  4. **감사** — `AuditAdvisor`(대화) + `ToolAuditAspect`(도구) 2층
+- **DoD**: 레드팀 10종 전건 차단, 승인 없이 `CONFIRMED` 되면 실패
+- **증거**: 레드팀 결과표, 감사 로그 샘플 → [실험 E8](EXPERIMENTS.md)
+
+#### Phase 8 — 평가 · 관찰 · 복원력 `eval/` `advisor/`
+
+- **목표**: 품질을 주장이 아니라 **수치**로 남긴다
+- **골든셋 3종**
+  - `regulation` — 기대 조문이 출처에 있는가
+  - `calculation` — 기대 세액과 **완전 일치**하는가 (근사 허용 없음)
+  - `safety` — 차단돼야 할 것이 차단됐는가 (범위 밖 · 권한 밖 · 인젝션)
+- **채점 규칙 2가지가 특이하다**
+  - 계산 항목은 **도구 결과 ↔ 기대값** 과 **답변 문장의 숫자 ↔ 도구 결과** 를 **둘 다** 본다.
+    후자가 어긋나면 "도구는 맞았는데 모델이 다른 숫자를 말한" 경우고, 그게 정확히 잡고 싶은 실패다.
+  - OUT_OF_SCOPE 항목은 답변 내용이 아니라 **토큰 사용량**으로 채점한다.
+    거절 문구가 훌륭해도 주 모델을 불렀으면 실패다.
+- **지표**: `taxdesk.tokens{type}` · `taxdesk.latency{route}` · `taxdesk.tool.calls{name}` ·
+  `taxdesk.route{type}` · `taxdesk.fallback.count` → Prometheus
+- **폴백**: 주 모델 실패 시 보조 ChatClient 재시도 → `ModelUnavailableException` → 503
+- **DoD**: `./gradlew test -Peval` 통과, 장애 주입(잘못된 키) 시 응답 지속
+- **증거**: 골든셋 통과율 표, 지표 스크린샷 → [실험 E9](EXPERIMENTS.md)
+
+---
+
+## 5. 검증표 (완료 판정 기준)
+
+| 구분 | 요구사항 | 검증 방법 | 결과 |
+|---|---|---|---|
+| 기능 | 규정 답변에 조문 출처 표시 | 출처 없는 규정 답변 = 실패 | (Phase 3 후 기입) |
+| 기능 | 세액은 반드시 도구 경유 | 도구 호출 로그 없는 금액 언급 = 실패 | |
+| 기능 | 2,000만원 경계 판정 정확 | 1,999만 / 2,000만 / 2,001만 | |
+| 기능 | 비교과세 ①② 모두 산출 후 큰 값 | ①<② 케이스 | |
+| 기능 | 3턴 이상 맥락 유지 | 대명사 질문 5종 | |
+| 기능 | 범위 밖 질문은 모델 호출 없이 거절 | 양도세 질문 시 주 모델 토큰 0 | |
+| 기능 | 타사 조회 요청 시 한계 고지 + 대안 | 조회 시도 0회, 수동 입력 안내 100% | |
+| 비기능 | P95 5초 이내 | 부하 테스트 | |
+| 비기능 | 질의당 평균 토큰 상한 | Micrometer | |
+| 비기능 | 타인 계좌 조회 차단 | 레드팀 10종 | |
+| 비기능 | 승인 전 상담 미확정 | 승인 없이 CONFIRMED = 실패 | |
+| 비기능 | 주 모델 장애 시 응답 지속 | 장애 주입 | |
+| 비기능 | **세액 hallucination 0건** | 골든셋 계산 전건 도구 결과 일치 | |
+
+마지막 줄이 이 프로젝트의 하이라이트다.
+
+---
+
+## 6. 현재 진행 상태
+
+| 구분 | 상태 |
+|---|---|
+| Phase 1 — `AiConfig` · Advisor 체인 · ChatClient 3종 | ✅ |
+| Phase 2 — `IngestService` · `tax-docs/` 9종 | ✅ 청크 39 · **조문 메타 누락 0건** |
+| Phase 3 — `QueryRouter`(규칙→모델 2단) · `TaxDeskService` | ✅ 거절 4갈래 **토큰 0** |
+| Phase 4 — 계산 엔진 · 도구 4종 · 시드 5명 | ✅ **JUnit 16건 + 뮤테이션 4종 검증** |
+| Phase 5 — 메모리 · `ConversationState` · `AmountParser` | ✅ 멀티턴 금액 재사용 확인 |
+| Phase 6 — `ChatController` · `CalcController` · API 콘솔 | ✅ (SSE 스트리밍만 미구현) |
+| Phase 7 — 보안 · 승인 게이트 · 감사 · 마스킹 | ✅ 403/400/409 검증 |
+| Phase 8 — `TokenMeterAdvisor` · `UsageRegistry` · `EvalService` | ✅ 사용자별 토큰 집계 |
+| 2026 세법 원문 대조 (`docs/raw_law/`) | ✅ **Gross-up 11%→10% 오류 발견·수정** |
+| `golden.json` | ⛔ `items: []` — 다음 차례 |
+| `OwnerIsolationTest` · `QueryRouterTest` · `AdvisorOrderTest` | ⛔ 빈 껍데기 |
+| 실험 E1~E11 실행 | ⛔ 설계만 완료 |
+
+```
+./gradlew test  →  BUILD SUCCESSFUL (17 tests)
+```
+
+**계산·라우팅·권한·인제스트는 실제 기동으로 검증됐고, 골든셋 실행과 실험은 아직이다.**
+
+### 실행 방법
+
+```bash
+export OPENAI_API_KEY_SKALA1=sk-...
+./gradlew bootRun                       # 기본 8080
+./gradlew bootRun --args='--server.port=8099'   # 포트 변경
+
+# 1) 문서 색인 (최초 1회)
+curl -u admin:admin -X POST localhost:8099/admin/ingest
+
+# 2) API 콘솔
+open http://localhost:8099/console.html
+```
+
+계정: `antman/pass1` `isabu/pass2` `jonber/pass3` `richman/pass4` `americano/pass5` `admin/admin`
+
+## 7. 한계와 향후
+
+- 세율·공제는 **2026 귀속 · 실습용 단순화**다. 인적공제 상세, 소득 종류별 예외는 다루지 않는다.
+- 자사 계좌 외 금융소득은 고객 진술에 의존한다. 이 한계는 숨기지 않고 계산 전개에 표시한다.
+- 확장 후보: 귀속연도 스위치(`effectiveYear` 메타 필터), 다국어(질문 언어 감지 → 한국어 검색 →
+  원 언어 답변, **근거는 한국어 원문 인용**).

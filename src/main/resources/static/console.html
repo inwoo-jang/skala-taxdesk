@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SKALA증권 세무상담 데스크 — API 콘솔</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --panel:#fff; --line:#e3e6ea; --line2:#eef0f3;
+    --text:#16191d; --muted:#6b7280; --accent:#1f4b8e;
+    --get:#0d7a4f; --post:#1f4b8e; --del:#b3261e; --put:#8a5a00;
+    --code:#f4f6f8; --codetext:#1f2933; --ok:#0d7a4f; --err:#b3261e;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",sans-serif}
+
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 22px;
+         display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+  header h1{font-size:16px;margin:0;letter-spacing:-.2px}
+  header .sub{font-size:12px;color:var(--muted)}
+  header .spacer{flex:1}
+  .pill{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);
+        background:#fff;color:var(--muted)}
+  .pill.on{border-color:var(--ok);color:var(--ok)}
+  .pill.off{border-color:var(--err);color:var(--err)}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:20px 22px 80px}
+
+  .authbar{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+           padding:14px 16px;margin-bottom:22px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .authbar .f{display:flex;flex-direction:column;gap:5px}
+  .authbar label{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.2px}
+  select,input,textarea{font:13px var(--mono);padding:7px 9px;border:1px solid var(--line);
+         border-radius:6px;background:#fff;color:var(--text);min-width:150px}
+  textarea{font-family:inherit;font-size:13px;width:100%;min-height:62px;resize:vertical}
+  button{font:600 13px/1 inherit;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);
+         background:var(--accent);color:#fff;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  button.ghost{background:#fff;color:var(--accent)}
+  button.tiny{font-size:11px;padding:5px 9px;border-color:var(--line);background:#fff;color:var(--muted)}
+  button.tiny:hover{border-color:var(--accent);color:var(--accent);filter:none}
+
+  .group{margin-bottom:26px}
+  .group>h2{font-size:13px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase;
+            margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+
+  .op{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;
+      overflow:hidden}
+  .op.open{border-color:#c9d3e0;box-shadow:0 1px 3px rgba(20,30,50,.06)}
+  .op>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:11px}
+  .op>summary::-webkit-details-marker{display:none}
+  .m{font:700 11px var(--mono);letter-spacing:.5px;color:#fff;padding:4px 9px;border-radius:5px;min-width:58px;text-align:center}
+  .m.GET{background:var(--get)} .m.POST{background:var(--post)}
+  .m.DELETE{background:var(--del)} .m.PUT{background:var(--put)}
+  .path{font:600 13px var(--mono)}
+  .desc{color:var(--muted);font-size:12.5px;flex:1}
+  .phase{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:2px 7px}
+
+  .body{padding:0 14px 14px;border-top:1px solid var(--line2)}
+  .sec{margin-top:14px}
+  .sec>h4{font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin:0 0 8px}
+  .params{display:grid;gap:9px}
+  .param{display:grid;grid-template-columns:170px 1fr;gap:12px;align-items:start}
+  .param .nm{font:600 12px var(--mono);padding-top:8px}
+  .param .nm em{display:block;font:400 11px/1.4 inherit;color:var(--muted);font-style:normal}
+  .param .nm .req{color:var(--del)}
+  .param input,.param select{width:100%}
+  .actions{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+
+  pre{background:var(--code);color:var(--codetext);border:1px solid var(--line);border-radius:7px;
+      padding:11px 13px;margin:0;font:12px/1.65 var(--mono);overflow-x:auto;white-space:pre-wrap;
+      word-break:break-all}
+  .lbl{font-size:11px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin:12px 0 6px;font-weight:600}
+  .status{display:inline-flex;align-items:center;gap:7px;font:600 12px var(--mono);
+          padding:4px 10px;border-radius:5px;border:1px solid var(--line)}
+  .status.s2{color:var(--ok);border-color:#bfe3d0;background:#f2fbf6}
+  .status.s4,.status.s5{color:var(--err);border-color:#f0c9c6;background:#fdf5f5}
+
+  .tabs{display:flex;gap:6px;margin:12px 0 8px}
+  .tabs button{font-size:12px;padding:5px 11px;background:#fff;color:var(--muted);border-color:var(--line)}
+  .tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  .cards{display:grid;gap:10px}
+  .card{border:1px solid var(--line);border-radius:8px;padding:11px 13px;background:#fff}
+  .card h5{margin:0 0 7px;font-size:12px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:13px}
+  .kv span:last-child{font:600 13px var(--mono)}
+  .badge{display:inline-block;font:700 11px var(--mono);padding:3px 9px;border-radius:5px;
+         background:#eef2f8;color:var(--accent);letter-spacing:.4px}
+  .steps{font:12px/1.85 var(--mono);background:var(--code);border-radius:6px;padding:10px 12px;
+         border:1px solid var(--line)}
+  .cite{font-size:12.5px;padding:4px 0;border-bottom:1px dashed var(--line2)}
+  .cite:last-child{border:0}
+  .cite b{color:var(--accent)}
+  .total{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);
+         display:flex;justify-content:space-between;font-weight:700}
+  .warn{background:#fff8e8;border:1px solid #f0dcae;color:#7a5a00;border-radius:7px;
+        padding:9px 12px;font-size:12.5px;margin-top:10px}
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .presets button{font-size:11.5px;padding:5px 10px;background:#fff;color:var(--accent);
+                  border-color:#ccd8e8;font-weight:500}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .cap{position:relative}
+  .capnote{font:11px var(--mono);color:var(--muted);text-align:right;margin-top:9px;
+           padding-top:7px;border-top:1px solid var(--line2)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SKALA증권 세무상담 데스크</h1>
+  <span class="sub">API 콘솔 · 2026 귀속</span>
+  <span class="spacer"></span>
+  <span class="pill" id="serverPill">서버 확인 중…</span>
+  <span class="pill" id="authPill">인증 없음</span>
+</header>
+
+<div class="wrap">
+
+  <div class="authbar">
+    <div class="f">
+      <label>username</label>
+      <select id="acct">
+        <option value="">— none —</option>
+        <option value="antman:pass1">antman (분리과세 종결)</option>
+        <option value="isabu:pass2">isabu (ISA 보유)</option>
+        <option value="jonber:pass3">jonber (비교과세 ②선택)</option>
+        <option value="richman:pass4">richman (고액·사업소득)</option>
+        <option value="americano:pass5">americano (해외배당)</option>
+        <option value="admin:admin">admin (운영자)</option>
+      </select>
+    </div>
+    <div class="f">
+      <label>Base URL</label>
+      <input id="base" value="" placeholder="http://localhost:8080">
+    </div>
+    <div class="f">
+      <label>conversationId</label>
+      <input id="conv" value="demo-1">
+    </div>
+    <button class="ghost" onclick="ping()">서버 상태 확인</button>
+    <div class="hint">계정만 바꿔 같은 요청을 보내면 <b>소유자 격리</b>가 눈에 보입니다.</div>
+  </div>
+
+  <div id="ops"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────── API 명세
+const SPEC = [
+ { group:'calc — 계산 도구 직접 호출', ops:[
+   { m:'POST', path:'/calc/classify', phase:'Phase 4', desc:'분리과세 / 종합과세 판정',
+     body:{ interest:'8347210', domesticDividend:'6912500', foreignDividend:'0', externalAmount:'0' },
+     presets:[
+       ['antman 1,526만','8347210|6912500|0|0'],
+       ['isabu 2,153만','9128440|12400000|0|0'],
+       ['jonber 2,543만','1247830|24180000|0|0'],
+       ['richman 1억250만','21384600|61250000|19870000|0'],
+       ['americano 3,036만','2916350|0|27440000|0'],
+       ['경계 1,999만','19990000|0|0|0'],
+       ['경계 2,000만','20000000|0|0|0'],
+       ['경계 2,001만','20010000|0|0|0'],
+     ], presetKeys:['interest','domesticDividend','foreignDividend','externalAmount'] },
+   { m:'POST', path:'/calc/tax', phase:'Phase 4', desc:'비교과세 세액. 종합과세 판정 후에만 호출',
+     body:{ financialIncome:'102504600', grossUpEligibleDividend:'61250000',
+            otherIncome:'152000000', deduction:'5000000', prepaidTax:'14350640' },
+     presets:[
+       ['isabu','21528440|12400000|80500000|1500000|3013960'],
+       ['jonber','25427830|24180000|0|1500000|3559890'],
+       ['richman','102504600|61250000|152000000|5000000|14350640'],
+       ['americano','30356350|0|61300000|1500000|4249880'],
+       ['antman(분리과세→400)','15259710|6912500|41500000|1500000|2136350'],
+     ], presetKeys:['financialIncome','grossUpEligibleDividend','otherIncome','deduction','prepaidTax'] },
+   { m:'POST', path:'/calc/simulate', phase:'Phase 4', desc:'연중 플래닝. 문턱까지 남은 금액 역산',
+     body:{ financialIncome:'15259710', grossUpEligibleDividend:'6912500',
+            otherIncome:'41500000', deduction:'1500000' },
+     presets:[
+       ['antman','15259710|6912500|41500000|1500000'],
+       ['isabu','21528440|12400000|80500000|1500000'],
+       ['jonber','25427830|24180000|0|1500000'],
+       ['richman','102504600|61250000|152000000|5000000'],
+       ['americano','30356350|0|61300000|1500000'],
+     ], presetKeys:['financialIncome','grossUpEligibleDividend','otherIncome','deduction'] },
+   { m:'GET', path:'/calc/due-date', phase:'Phase 4', desc:'신고·납부 기한',
+     query:[['year','2026']] },
+ ]},
+ { group:'chat — 고객 상담', ops:[
+   { m:'POST', path:'/chat', phase:'Phase 3·6', desc:'상담 질의. 라우팅 → RAG/Tool → 구조화 응답',
+     body:{ question:'', conversationId:'@conv' }, },
+   { m:'GET', path:'/chat/stream', phase:'Phase 6', desc:'SSE 스트리밍. 마지막 이벤트로 메타 전송',
+     query:[['question','저 종합과세 대상인가요?'],['conversationId','@conv']] },
+   { m:'GET', path:'/chat/history', phase:'Phase 5', desc:'세션 대화 내역',
+     query:[['conversationId','@conv']] },
+   { m:'DELETE', path:'/chat/history', phase:'Phase 5', desc:'세션 초기화',
+     query:[['conversationId','@conv']] },
+ ]},
+ { group:'admin — 운영자', ops:[
+   { m:'POST', path:'/admin/ingest', phase:'Phase 2', desc:'문서 색인. 청크 수·조문 메타 누락 건수 반환' },
+   { m:'GET', path:'/admin/applications', phase:'Phase 7', desc:'절세상품 자격확인 신청 목록',
+     query:[['status','PENDING']] },
+   { m:'POST', path:'/admin/applications/{id}/approve', phase:'Phase 7', desc:'PENDING → APPROVED',
+     pathParams:[['id','']] },
+   { m:'GET', path:'/admin/usage', phase:'Phase 8', desc:'사용자별 토큰 사용량' },
+   { m:'GET', path:'/admin/usage/{userId}', phase:'Phase 8', desc:'특정 사용자 토큰 사용량',
+     pathParams:[['userId','antman']] },
+   { m:'POST', path:'/admin/applications/{id}/reject', phase:'Phase 7', desc:'PENDING → REJECTED (사유 필수)',
+     pathParams:[['id','']], body:{ note:'자격 요건(조특법 §88의2①) 미해당' } },
+ ]},
+ { group:'actuator — 관찰', ops:[
+   { m:'GET', path:'/actuator/health', phase:'Phase 1', desc:'기동 확인' },
+   { m:'GET', path:'/actuator/metrics/taxdesk.tokens', phase:'Phase 8', desc:'토큰 사용량' },
+   { m:'GET', path:'/actuator/prometheus', phase:'Phase 8', desc:'전체 지표 (ADMIN)' },
+ ]},
+];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const baseUrl = () => ($('#base').value || location.origin).replace(/\/$/,'');
+const authHeader = () => { const v=$('#acct').value; return v ? 'Basic '+btoa(v) : null; };
+
+// ─────────────────────────────────────────────────────────── 렌더링
+let uid = 0;
+function render(){
+  $('#ops').innerHTML = SPEC.map(g => `
+    <div class="group">
+      <h2>${esc(g.group)}</h2>
+      ${g.ops.map(op => opBox(op)).join('')}
+    </div>`).join('');
+}
+
+function opBox(op){
+  const id = 'op'+(uid++);
+  op._id = id; window[id] = op;
+  const pp = (op.pathParams||[]).map(([k,v]) => field(id,'p',k,v)).join('');
+  const qp = (op.query||[]).map(([k,v]) => field(id,'q',k,v)).join('');
+  const bodyKeys = op.body ? Object.keys(op.body) : [];
+  const bp = bodyKeys.map(k => field(id,'b',k,op.body[k], k==='question')).join('');
+  const presets = op.presets ? `<div class="presets">${op.presets.map(([lab,q]) =>
+      `<button onclick="preset('${id}','${esc(q).replace(/'/g,"\\'")}')">${esc(lab)}</button>`).join('')}</div>` : '';
+  const hasParams = pp||qp||bp;
+  return `
+  <details class="op" id="${id}" ontoggle="this.classList.toggle('open',this.open)">
+    <summary>
+      <span class="m ${op.m}">${op.m}</span>
+      <span class="path">${esc(op.path)}</span>
+      <span class="desc">${esc(op.desc)}</span>
+      <span class="phase">${esc(op.phase)}</span>
+    </summary>
+    <div class="body" id="${id}-cap">
+      ${hasParams ? `<div class="sec"><h4>Parameters</h4><div class="params">${pp}${qp}${bp}</div>${presets}</div>` : ''}
+      <div class="actions">
+        <button onclick="exec('${id}')">Execute</button>
+        <button class="tiny" onclick="clearRes('${id}')">Clear</button>
+        <span style="flex:1"></span>
+        <button class="tiny" onclick="capture('${id}')">📷 이 박스를 PNG로 저장</button>
+      </div>
+      <div id="${id}-res"></div>
+    </div>
+  </details>`;
+}
+
+function field(id, kind, name, val, big){
+  const v = val === '@conv' ? '' : val;
+  const ph = val === '@conv' ? '(conversationId 자동)' : '';
+  const inp = big
+    ? `<textarea id="${id}-${kind}-${name}" placeholder="${ph}">${esc(v)}</textarea>`
+    : `<input id="${id}-${kind}-${name}" value="${esc(v)}" placeholder="${ph}">`;
+  const tag = {p:'path', q:'query', b:'body'}[kind];
+  return `<div class="param">
+      <div class="nm">${esc(name)}${kind==='p'?' <span class="req">*</span>':''}<em>${tag}</em></div>
+      <div>${inp}</div>
+    </div>`;
+}
+
+function preset(id, q){
+  const el = document.getElementById(id+'-b-question');
+  if (el) { el.value = q; el.focus(); }
+}
+function clearRes(id){ document.getElementById(id+'-res').innerHTML = ''; }
+
+// ─────────────────────────────────────────────────────────── 실행
+function buildRequest(id){
+  const op = window[id];
+  let path = op.path;
+  (op.pathParams||[]).forEach(([k]) => {
+    path = path.replace('{'+k+'}', encodeURIComponent(val(id,'p',k)));
+  });
+  const qs = (op.query||[]).map(([k,d]) => {
+    const v = val(id,'q',k) || (d==='@conv' ? $('#conv').value : '');
+    return v ? encodeURIComponent(k)+'='+encodeURIComponent(v) : '';
+  }).filter(Boolean).join('&');
+  const url = baseUrl() + path + (qs ? '?'+qs : '');
+
+  let body = null;
+  if (op.body){
+    body = {};
+    Object.keys(op.body).forEach(k => {
+      const d = op.body[k];
+      body[k] = val(id,'b',k) || (d==='@conv' ? $('#conv').value : '');
+    });
+  }
+  const headers = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  const a = authHeader(); if (a) headers['Authorization'] = a;
+  return { url, method: op.m, headers, body };
+}
+function val(id,kind,name){
+  const el = document.getElementById(`${id}-${kind}-${name}`);
+  return el ? el.value.trim() : '';
+}
+
+function curlOf(r){
+  const acct = $('#acct').value;
+  let s = `curl -X ${r.method} '${r.url}'`;
+  Object.entries(r.headers).forEach(([k,v]) => {
+    s += ` \\\n  -H '${k}: ${k==='Authorization' ? v.slice(0,12)+'…' : v}'`;
+  });
+  if (acct) s += ` \\\n  # 계정: ${acct.split(':')[0]}`;
+  if (r.body) s += ` \\\n  -d '${JSON.stringify(r.body)}'`;
+  return s;
+}
+
+async function exec(id){
+  const r = buildRequest(id);
+  const out = document.getElementById(id+'-res');
+  out.innerHTML = `<div class="lbl">실행 중…</div>`;
+  const t0 = performance.now();
+  let res, text, err = null;
+  try{
+    res = await fetch(r.url, { method:r.method, headers:r.headers,
+                               body: r.body ? JSON.stringify(r.body) : undefined });
+    text = await res.text();
+  }catch(e){ err = e; }
+  const ms = Math.round(performance.now() - t0);
+
+  if (err){
+    out.innerHTML = block(r, null, null, ms,
+      `서버에 연결하지 못했습니다: ${esc(err.message)}\n\n` +
+      `· ./gradlew bootRun 으로 앱이 떠 있는지 확인하세요\n` +
+      `· Base URL 이 맞는지 확인하세요 (현재: ${esc(baseUrl())})`);
+    return;
+  }
+  let json = null;
+  try { json = JSON.parse(text); } catch(e){}
+  out.innerHTML = block(r, res, json, ms, text);
+  if (json && json.route) mountPretty(id, json);
+}
+
+function block(r, res, json, ms, raw){
+  const st = res ? res.status : 0;
+  const cls = st>=200&&st<300 ? 's2' : st>=400 ? 's4' : '';
+  const hdrs = res ? [...res.headers.entries()].map(([k,v])=>`${k}: ${v}`).join('\n') : '(응답 없음)';
+  const notes = notesFor(st);
+  return `
+   <div class="lbl">curl</div><pre>${esc(curlOf(r))}</pre>
+   <div class="lbl">Request URL</div><pre>${esc(r.url)}</pre>
+   ${r.body ? `<div class="lbl">Request body</div><pre>${esc(JSON.stringify(r.body,null,2))}</pre>` : ''}
+   <div class="lbl">Server response</div>
+   <div><span class="status ${cls}">${res ? st+' '+(res.statusText||'') : '연결 실패'}</span>
+        <span class="status">${ms} ms</span></div>
+   ${notes}
+   <div class="lbl">Response headers</div><pre>${esc(hdrs)}</pre>
+   <div class="lbl">Response body</div>
+   <pre>${esc(json ? JSON.stringify(json,null,2) : raw || '(빈 응답)')}</pre>
+   <div id="pretty"></div>`;
+}
+
+function notesFor(){ return ''; }
+
+// ─────────────────────────────────── AnswerDto 구조화 보기 (보고서 캡처용)
+function mountPretty(id, a){
+  const host = document.getElementById(id+'-res').querySelector('#pretty');
+  if (!host) return;
+  const won = n => (n ?? 0).toLocaleString('ko-KR') + '원';
+  let h = `<div class="lbl">구조화 응답 (AnswerDto)</div><div class="cards">`;
+  h += `<div class="card"><h5>라우트</h5><span class="badge">${esc(a.route||'-')}</span>
+        ${a.answer ? `<p style="margin:9px 0 0">${esc(a.answer)}</p>`:''}</div>`;
+  if (a.citations?.length) h += `<div class="card"><h5>인용한 근거</h5>${
+      a.citations.map(c=>`<div class="cite"><b>${esc(c.article||'')}</b> · ${esc(c.doc||'')}${
+        c.score!=null?` <span style="color:var(--muted)">(${c.score.toFixed(2)})</span>`:''}</div>`).join('')}</div>`;
+  if (a.toolCalls?.length) h += `<div class="card"><h5>호출한 도구 (${a.toolCalls.length})</h5>${
+      a.toolCalls.map(t=>`<div class="cite"><b>${esc(t.name)}</b><br>
+        <span style="color:var(--muted);font:11px var(--mono)">${esc(t.args||'')}</span></div>`).join('')}</div>`;
+  const c = a.calculation;
+  if (c?.steps?.length) h += `<div class="card"><h5>계산 전개 — 도구가 반환한 값</h5>
+      <div class="steps">${c.steps.map(esc).join('<br>')}</div>
+      <div class="total"><span>결정세액</span><span>${won(c.decidedTax)}</span></div>
+      <div class="kv"><span>지방소득세 (별도)</span><span>${won(c.localTax)}</span></div>
+      <div class="kv"><span>기납부세액</span><span>${won(c.prepaidTax)}</span></div>
+      <div class="kv"><span>${c.payable<0?'환급받으실 세액':'추가 납부하실 세액'}</span>
+           <span>${won(Math.abs(c.payable||0))}</span></div></div>`;
+  if (a.tokens||a.latencyMs!=null) h += `<div class="card"><h5>비용 · 지연</h5>
+      <div class="kv"><span>prompt</span><span>${a.tokens?.prompt ?? 0}</span></div>
+      <div class="kv"><span>completion</span><span>${a.tokens?.completion ?? 0}</span></div>
+      <div class="kv"><span>latency</span><span>${a.latencyMs ?? '-'} ms</span></div>
+      </div>`;
+  if (a.disclaimer) h += `<div class="card"><h5>고지</h5><p style="margin:0;color:var(--muted)">${esc(a.disclaimer)}</p></div>`;
+  host.innerHTML = h + `</div>`;
+}
+
+// ─────────────────────────────────────────────── PNG 저장 (외부 라이브러리 없음)
+async function capture(id){
+  const node = document.getElementById(id+'-cap');
+  const op = window[id];
+  const stamp = document.createElement('div');
+  stamp.className = 'capnote';
+  stamp.textContent = `${op.m} ${op.path}  ·  계정: ${$('#acct').value.split(':')[0] || '없음'}  ·  ${new Date().toLocaleString('ko-KR')}`;
+  node.appendChild(stamp);
+  try{
+    const png = await nodeToPng(node);
+    const a = document.createElement('a');
+    a.href = png;
+    a.download = `${op.m}_${op.path.replace(/[\/{}]/g,'_')}.png`.replace(/_+/g,'_');
+    a.click();
+  }catch(e){
+    alert('PNG 생성에 실패했습니다: ' + e.message + '\n\nOS 스크린샷(⌘⇧4)을 사용하세요.');
+  }finally{
+    stamp.remove();
+  }
+}
+
+async function nodeToPng(node){
+  const scale = 2;
+  const rect = node.getBoundingClientRect();
+  const w = Math.ceil(rect.width), h = Math.ceil(rect.height);
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('button').forEach(b => b.remove());   // 버튼은 캡처에서 뺀다
+  inlineStyles(node, clone);
+  clone.style.width = w+'px';
+  clone.style.background = '#fff';
+  clone.style.margin = '0';
+
+  const html = new XMLSerializer().serializeToString(clone);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+    `<foreignObject x="0" y="0" width="${w}" height="${h}">` +
+    `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${w}px">${html}</div>` +
+    `</foreignObject></svg>`;
+
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await new Promise((ok, no) => { img.onload = ok; img.onerror = () => no(new Error('SVG 렌더 실패')); });
+
+  const cv = document.createElement('canvas');
+  cv.width = w*scale; cv.height = h*scale;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0);
+  return cv.toDataURL('image/png');
+}
+
+/** foreignObject 는 외부 CSS 를 못 읽는다. 계산된 스타일을 인라인으로 복사해 넣는다. */
+const COPY = ['font','font-family','font-size','font-weight','font-style','line-height','letter-spacing',
+  'color','background-color','background','border','border-radius','border-top','border-bottom',
+  'border-left','border-right','padding','margin','display','flex','flex-direction','justify-content',
+  'align-items','gap','grid-template-columns','white-space','word-break','text-align','text-transform',
+  'width','min-width','max-width','box-sizing','overflow','list-style'];
+function inlineStyles(src, dst){
+  const s = getComputedStyle(src);
+  let css = '';
+  COPY.forEach(p => { const v = s.getPropertyValue(p); if (v) css += `${p}:${v};`; });
+  dst.setAttribute('style', css + (dst.getAttribute('style')||''));
+  const sc = src.children, dc = dst.children;
+  for (let i=0, j=0; i<sc.length && j<dc.length; i++, j++){
+    if (sc[i].tagName === 'BUTTON') { j--; continue; }   // 지운 버튼만큼 인덱스 보정
+    inlineStyles(sc[i], dc[j]);
+  }
+}
+
+// ─────────────────────────────────────────────────────────── 상태
+async function ping(){
+  const p = $('#serverPill');
+  p.className = 'pill'; p.textContent = '확인 중…';
+  try{
+    const r = await fetch(baseUrl()+'/actuator/health');
+    p.className = 'pill ' + (r.ok ? 'on' : 'off');
+    p.textContent = r.ok ? '서버 UP' : '서버 응답 '+r.status;
+  }catch(e){
+    p.className = 'pill off'; p.textContent = '서버 DOWN';
+  }
+}
+$('#acct').addEventListener('change', () => {
+  const v = $('#acct').value;
+  const el = $('#authPill');
+  el.className = 'pill ' + (v ? 'on' : '');
+  el.textContent = v ? '인증: ' + v.split(':')[0] : '인증 없음';
+});
+
+$('#base').value = location.origin;
+render();
+ping();
+</script>
+</body>
+</html>
