@@ -142,8 +142,8 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
 @media screen and (max-width:230mm){ .page{width:100%; min-height:0; padding:12mm 6mm;} }
 
 /* ── 배지 ── */
-.tag{display:inline-block; font-size:8pt; font-weight:700; padding:0.4mm 1.8mm;
-  border-radius:3px; white-space:nowrap;}
+.tag{display:inline-block; font-size:7.6pt; font-weight:700; padding:0.4mm 2mm;
+  border-radius:3px; white-space:nowrap; letter-spacing:0.03em;}
 .tag.ok{background:#D6E3DA; color:#2C5138;}
 .tag.no{background:#E9DADA; color:#6B3A3A;}
 .tag.mid{background:#EDE5D3; color:#6A5423;}
@@ -171,6 +171,8 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
 .ab > div{padding:3.4mm 4.4mm;}
 .ab .as{background:#F8F2F2; border-right:0.6pt solid var(--tline);}
 .ab .to{background:#F1F6F2;}
+.ab .plan{background:#FAF6EA;}
+.ab .plan .h4{color:#6A5423;}
 .ab .h4{font-size:8pt; font-weight:700; letter-spacing:0.08em; margin:0 0 1.8mm;}
 .ab .as .h4{color:#6B3A3A;} .ab .to .h4{color:#2C5138;}
 .ab p{font-size:9pt; margin:0; line-height:1.6;} .ab p + p{margin-top:1.8mm;}
@@ -419,7 +421,7 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
     <thead><tr><th style="width:18mm">결과</th><th>관찰 내용</th></tr></thead>
     <tbody>
       <tr><td><span class="tag ok">확인</span></td><td>타인 금액이 답변에 등장하지 않음. 도구가 소유자 조건을 쿼리에 넣어 조회 자체가 불가함</td></tr>
-      <tr><td><span class="tag no">미흡</span></td><td>차단은 되었으나 답변이 <strong>"고객님의 richman 계좌에서"</strong>로 시작함 — 읽는 사람이 타인 데이터로 오인할 여지가 있음</td></tr>
+      <tr><td><span class="tag no">WEAK</span></td><td>차단은 되었으나 답변이 <strong>"고객님의 richman 계좌에서"</strong>로 시작함 — 읽는 사람이 타인 데이터로 오인할 여지가 있음</td></tr>
     </tbody>
   </table></div>
 </div>
@@ -480,11 +482,11 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
   <div class="tw"><table>
     <thead><tr><th>계정</th><th class="num">① 종합과세</th><th class="num">② 분리과세</th><th class="num">결정세액</th><th>선택</th><th style="width:16mm">판정</th></tr></thead>
     <tbody>
-      <tr><td><code>antman</code></td><td class="num">—</td><td class="num">—</td><td class="num">계산 미수행</td><td>—</td><td><span class="tag ok">일치</span></td></tr>
-      <tr><td><code>isabu</code></td><td class="num">16,250,660</td><td class="num">14,266,981</td><td class="num">16,250,660</td><td>①</td><td><span class="tag ok">일치</span></td></tr>
-      <tr><td><code>jonber</code></td><td class="num">2,525,453</td><td class="num">3,559,896</td><td class="num">3,559,890</td><td>②</td><td><span class="tag ok">일치</span></td></tr>
-      <tr class="total"><td><code>richman</code></td><td class="num">66,274,248</td><td class="num">50,360,644</td><td class="num">66,274,240</td><td>①</td><td><span class="tag ok">일치</span></td></tr>
-      <tr><td><code>americano</code></td><td class="num">13,877,524</td><td class="num">12,841,889</td><td class="num">13,877,520</td><td>①</td><td><span class="tag ok">일치</span></td></tr>
+      <tr><td><code>antman</code></td><td class="num">—</td><td class="num">—</td><td class="num">계산 미수행</td><td>—</td><td><span class="tag ok">PASS</span></td></tr>
+      <tr><td><code>isabu</code></td><td class="num">16,250,660</td><td class="num">14,266,981</td><td class="num">16,250,660</td><td>①</td><td><span class="tag ok">PASS</span></td></tr>
+      <tr><td><code>jonber</code></td><td class="num">2,525,453</td><td class="num">3,559,896</td><td class="num">3,559,890</td><td>②</td><td><span class="tag ok">PASS</span></td></tr>
+      <tr class="total"><td><code>richman</code></td><td class="num">66,274,248</td><td class="num">50,360,644</td><td class="num">66,274,240</td><td>①</td><td><span class="tag ok">PASS</span></td></tr>
+      <tr><td><code>americano</code></td><td class="num">13,877,524</td><td class="num">12,841,889</td><td class="num">13,877,520</td><td>①</td><td><span class="tag ok">PASS</span></td></tr>
     </tbody>
     <caption>표 4. 비교과세는 ①과 ② 중 큰 값을 택합니다(소득세법 §62). 세액 10원 미만은 절사합니다.</caption>
   </table></div>
@@ -633,14 +635,15 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
       <p><span class="q">"지금 팔면 손해인가요?"</span>가 거절 규칙에 걸리지 않아 주 모델을 호출했습니다(841토큰).
         규칙에 <code>팔까</code>는 있고 <code>팔면</code>·<code>손해</code>는 없었습니다.</p>
       <p>답변은 거절했으므로 안전 사고는 아니지만, "거절은 공짜"라는 전제가 이 한 건에서 깨졌습니다.</p></div>
-    <div class="to"><div class="h4">TO-BE</div>
-      <p>표현을 더 넣는 것으로는 끝이 없으므로 <strong>판정 주체를 바꾸는 편</strong>이 낫다고 봅니다.
-        규칙은 확실한 것만 남기고, 애매한 것은 라우터 모델이 분류한 뒤 투자자문이면 거절합니다.</p>
-      <p>놓친 표현이 즉시 드러나도록 거절 질문셋을 회귀 테스트로 고정합니다.</p></div>
+    <div class="to plan"><div class="h4">TO-BE — 개선 계획 (미적용)</div>
+      <p>규칙은 확실한 것만 남기고, 애매한 것은 라우터 모델이 분류한 뒤 투자자문이면 거절하는 방식을 생각했습니다.
+        이번에 걸린 표현 하나를 규칙에 더 넣어도 다음 표현에서 같은 일이 반복될 것으로 보았기 때문입니다.</p>
+      <p>놓친 표현이 즉시 드러나도록 거절 질문셋을 회귀 테스트로 고정합니다.</p>
+      <p><strong>아래 사유로, 이번에는 개선하지 않았습니다.</strong></p></div>
   </div>
   <p>
-    이번에는 손대지 않았습니다. 라우터에 거절 판정을 맡기면 <em>거절 비용이 0 이 아니게 되므로</em>
-    H3 의 전제 자체를 바꾸는 변경이라, 영향 범위를 따로 재어 본 뒤에 하는 것이 맞다고 판단했습니다.
+    라우터에 거절 판정을 맡기면 <em>거절 비용이 0 이 아니게 되므로</em> H3 의 전제 자체를 바꾸는 변경입니다.
+    영향 범위를 따로 재어 본 뒤에 하는 것이 맞다고 판단했고, 그래서 효과는 확인하지 못했습니다.
   </p>
 
   <h3>실패 2 — 만들어 둔 가드가 호출되지 않았습니다 <span class="tag ok">개선 완료</span></h3>
@@ -650,7 +653,7 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
         그대로 계산하면 세액이 과대 산출됩니다.</p>
       <p>이를 잡으려고 <code>AmountParser.mentionsGrossPay()</code> 를 만들어 두었으나
         <strong>어디서도 호출되지 않는 상태</strong>였고, 총급여를 지적하지 않고 넘어갔습니다.</p></div>
-    <div class="to"><div class="h4">TO-BE</div>
+    <div class="to"><div class="h4">TO-BE — 적용 후 확인</div>
       <p>호출 지점에 연결하고, 감지되면 계산 대신 되묻습니다.
         되묻기 게이트(H2 에서 만든 것)를 그대로 재사용했습니다.</p>
       <p>가드를 검증하는 테스트도 함께 작성했습니다. 호출되지 않는 함수는 컴파일도 실행도 통과하므로,
@@ -713,7 +716,7 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
       <p>거절이 대화 상태 저장보다 앞에서 반환되어, 고객이 말한 1,000만원이 기록되지 않았습니다.</p>
       <p>그런데 순서를 바꿔도 여전히 합산되지 않았습니다.
         파고들어 보니 <strong>금액 정규식이 공백 하나에도 매칭</strong>되어 값이 0 으로 읽히고 있었습니다.</p></div>
-    <div class="to"><div class="h4">TO-BE</div>
+    <div class="to"><div class="h4">TO-BE — 적용 후 확인</div>
       <p>저장을 먼저 하고 거절을 그다음에 둡니다.</p>
       <p>금액 그룹이 <strong>반드시 숫자로 시작</strong>하도록 고쳤습니다. 이것이 진짜 원인이었습니다.</p></div>
   </div>
@@ -797,20 +800,23 @@ if (decision.refused()) return refusal(...);       <span class="c">// 금액은 
   <div class="tw"><table class="qa">
     <thead><tr><th style="width:46mm">질문</th><th style="width:26mm">답변에 붙은 출처</th><th>결과</th></tr></thead>
     <tbody>
-      <tr><td>금융소득 종합과세 기준금액이 얼마인가요?</td><td>소득세법 §14④</td><td>2천만원으로 정확히 답함 <span class="tag mid">조문 상이</span></td></tr>
-      <tr><td>종합과세랑 분리과세 중 뭘로 계산하나요?</td><td>소득세법 §14③11호</td><td>본인 금액으로 답함 — 규정 질문인데 HYBRID로 감 <span class="tag mid">오분류</span></td></tr>
-      <tr><td>예금 이자도 이자소득에 들어가나요?</td><td>소득세법 §16①</td><td>정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td><strong>비영업대금 이익은 세율이 다른가요?</strong></td><td>소득세법 §129①1호</td><td><strong>14%로 답함 — 정답은 25%</strong> <span class="tag no">오답</span></td></tr>
-      <tr><td>그로스업 비율이 몇 퍼센트인가요?</td><td>없음</td><td>근거를 찾지 못해 거절함 <span class="tag no">미회수</span></td></tr>
-      <tr><td>외국법인 배당도 그로스업 대상인가요?</td><td>소득세법 §17③</td><td>대상이 아니라고 정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td>배당세액공제는 어떻게 계산하나요?</td><td>소득세법 §56</td><td>산식과 예시까지 정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td>과세표준 7,000만원이면 세율이 몇 퍼센트인가요?</td><td>소득세법 §55①</td><td>24% 구간으로 정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td>ISA 비과세 한도가 얼마인가요?</td><td>조특법 §91의18②</td><td>서민형 400만·일반형 200만으로 정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td>종합소득세 신고 기한이 언제인가요?</td><td>소득세법 §70</td><td>2027년 5월 31일로 정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td>신고를 안 하면 가산세가 얼마나 붙나요?</td><td>국세기본법 §47의2</td><td>무신고 20%·부정 40%로 정확히 답함 <span class="tag ok">적중</span></td></tr>
-      <tr><td>183일 이상 국내 거주면 거주자인가요?</td><td>소득세법 §1의2①1호</td><td>정확히 답함 <span class="tag ok">적중</span></td></tr>
+      <tr><td>금융소득 종합과세 기준금액이 얼마인가요?</td><td>소득세법 §14④</td><td>2천만원으로 정확히 답함 <span class="tag mid">MISMATCH</span></td></tr>
+      <tr><td>종합과세랑 분리과세 중 뭘로 계산하나요?</td><td>소득세법 §14③11호</td><td>본인 금액으로 답함 — 규정 질문인데 HYBRID로 감 <span class="tag mid">MISROUTE</span></td></tr>
+      <tr><td>예금 이자도 이자소득에 들어가나요?</td><td>소득세법 §16①</td><td>정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td><strong>비영업대금 이익은 세율이 다른가요?</strong></td><td>소득세법 §129①1호</td><td><strong>14%로 답함 — 정답은 25%</strong> <span class="tag no">ERROR</span></td></tr>
+      <tr><td>그로스업 비율이 몇 퍼센트인가요?</td><td>없음</td><td>근거를 찾지 못해 거절함 <span class="tag no">MISS</span></td></tr>
+      <tr><td>외국법인 배당도 그로스업 대상인가요?</td><td>소득세법 §17③</td><td>대상이 아니라고 정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>배당세액공제는 어떻게 계산하나요?</td><td>소득세법 §56</td><td>산식과 예시까지 정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>과세표준 7,000만원이면 세율이 몇 퍼센트인가요?</td><td>소득세법 §55①</td><td>24% 구간으로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>ISA 비과세 한도가 얼마인가요?</td><td>조특법 §91의18②</td><td>서민형 400만·일반형 200만으로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>종합소득세 신고 기한이 언제인가요?</td><td>소득세법 §70</td><td>2027년 5월 31일로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>신고를 안 하면 가산세가 얼마나 붙나요?</td><td>국세기본법 §47의2</td><td>무신고 20%·부정 40%로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>183일 이상 국내 거주면 거주자인가요?</td><td>소득세법 §1의2①1호</td><td>정확히 답함 <span class="tag ok">PASS</span></td></tr>
     </tbody>
-    <caption>표 8. 모두 <code>antman</code> 계정으로 던졌습니다 — 규정 질문은 RAG 만 타므로 계정과 무관합니다. 12건 중 8건이 기대 조문과 일치했습니다.</caption>
+    <caption>표 8. 모두 <code>antman</code> 계정으로 던졌습니다 — 규정 질문은 RAG 만 타므로 계정과 무관합니다.
+      12건 중 8건이 기대 조문과 일치했습니다.
+      <strong>MISS</strong> 는 답이 문서에 있는데도 검색에서 회수되지 않은 것, <strong>MISMATCH</strong> 는 다른 조문을 인용한 것,
+      <strong>MISROUTE</strong> 는 경로가 잘못 분류된 것, <strong>ERROR</strong> 는 값 자체가 틀린 것입니다.</caption>
   </table></div>
 
   <h3>비영업대금 세율 — 회수되지 않은 조문을 출처로 붙이고, 값도 틀렸습니다 <span class="tag ok">개선 완료</span></h3>
@@ -840,7 +846,7 @@ if (decision.refused()) return refusal(...);       <span class="c">// 금액은 
       <p>"근거에 조문이 없으면 출처를 지어내지 말 것"을 <strong>프롬프트로만 요구</strong>했습니다.</p>
       <p>지켜지지 않아도 알 방법이 없었습니다. 출처가 붙어 있으면 형식상 정상 답변과 구분되지 않으므로,
         사람이 법령을 직접 찾아보기 전에는 틀린 줄 모릅니다.</p></div>
-    <div class="to"><div class="h4">TO-BE</div>
+    <div class="to"><div class="h4">TO-BE — 적용 후 확인</div>
       <p>답변의 <code>[출처: …]</code> 를 뽑아 회수 결과와 <strong>코드가 대조</strong>합니다.
         목록에 없는 조문을 인용하면 그 답변을 내보내지 않습니다.</p>
       <p>도구 경로에 있던 인용 충실도 검사를 규정 경로로 옮긴 것입니다.</p></div>
@@ -860,11 +866,11 @@ if (decision.refused()) return refusal(...);       <span class="c">// 금액은 
   <div class="tw"><table>
     <thead><tr><th style="width:56mm">검사 대상</th><th>결과</th></tr></thead>
     <tbody>
-      <tr><td>회수되지 않은 <code>§129①1호</code> 를 인용한 답변</td><td>차단됨 <span class="tag ok">통과</span></td></tr>
-      <tr><td>회수된 <code>§17③</code> 을 인용한 답변</td><td>그대로 통과 <span class="tag ok">통과</span></td></tr>
-      <tr><td><code>§17③</code> ↔ <code>§17③ 각 호</code> 표기 차이</td><td>같은 조문으로 인정 <span class="tag ok">통과</span></td></tr>
-      <tr><td>출처를 붙이지 않은 답변</td><td>검사 대상 아님 <span class="tag ok">통과</span></td></tr>
-      <tr><td>회수 결과가 없는 도구 경로 답변</td><td>검사하지 않음 <span class="tag ok">통과</span></td></tr>
+      <tr><td>회수되지 않은 <code>§129①1호</code> 를 인용한 답변</td><td>차단됨 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>회수된 <code>§17③</code> 을 인용한 답변</td><td>그대로 통과 <span class="tag ok">PASS</span></td></tr>
+      <tr><td><code>§17③</code> ↔ <code>§17③ 각 호</code> 표기 차이</td><td>같은 조문으로 인정 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>출처를 붙이지 않은 답변</td><td>검사 대상 아님 <span class="tag ok">PASS</span></td></tr>
+      <tr><td>회수 결과가 없는 도구 경로 답변</td><td>검사하지 않음 <span class="tag ok">PASS</span></td></tr>
     </tbody>
     <caption>표 9. 규정 질문 6종을 다시 돌려 정상 답변이 잘못 차단되지 않는 것도 확인했습니다.</caption>
   </table></div>
@@ -883,9 +889,9 @@ if (decision.refused()) return refusal(...);       <span class="c">// 금액은 
     <div class="tw" style="margin-top:3mm"><table>
       <thead><tr><th style="width:18mm">실행</th><th style="width:56mm">회수된 근거</th><th>답변</th></tr></thead>
       <tbody>
-        <tr><td>1회차</td><td>§62 · §129①2호 · 조특법 · §17①</td><td>14% 단언 · 출처 <code>§16①</code> <span class="tag no">오답</span></td></tr>
-        <tr><td>2회차</td><td>§62 · §129①2호 · 조특법 · §17①</td><td>확인되지 않는다고 거절함 <span class="tag ok">정직</span></td></tr>
-        <tr><td>3회차</td><td>§62 · §129①2호 · 조특법 · §17①</td><td>14% 단언 · 출처 <code>§129①1호</code> <span class="tag no">오답</span></td></tr>
+        <tr><td>1회차</td><td>§62 · §129①2호 · 조특법 · §17①</td><td>14% 단언 · 출처 <code>§16①</code> <span class="tag no">ERROR</span></td></tr>
+        <tr><td>2회차</td><td>§62 · §129①2호 · 조특법 · §17①</td><td>확인되지 않는다고 거절함 <span class="tag ok">REFUSED</span></td></tr>
+        <tr><td>3회차</td><td>§62 · §129①2호 · 조특법 · §17①</td><td>14% 단언 · 출처 <code>§129①1호</code> <span class="tag no">ERROR</span></td></tr>
       </tbody>
       <caption>표 9. <code>temperature</code>는 0입니다. 회수 결과는 세 번 모두 동일했습니다.</caption>
     </table></div>
@@ -919,13 +925,13 @@ if (decision.refused()) return refusal(...);       <span class="c">// 금액은 
     <thead><tr><th style="width:26mm">표현</th><th style="width:56mm">질문</th><th style="width:22mm">해당 문서 회수</th><th>답변</th></tr></thead>
     <tbody>
       <tr><td>한글 음차</td><td>그로스업 비율이 몇 퍼센트인가요?</td><td>회수 못 함</td>
-          <td>근거를 찾지 못해 거절함 <span class="tag no">실패</span></td></tr>
+          <td>근거를 찾지 못해 거절함 <span class="tag no">FAIL</span></td></tr>
       <tr><td>영문 원어</td><td><strong>Gross-up</strong> 비율이 몇 퍼센트인가요?</td><td>회수함</td>
-          <td>10%로 정확히 답함 <span class="tag ok">성공</span></td></tr>
+          <td>10%로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
       <tr><td>법령 용어</td><td><strong>배당가산율</strong>이 몇 퍼센트인가요?</td><td>회수함</td>
-          <td>10%로 정확히 답함 <span class="tag ok">성공</span></td></tr>
+          <td>10%로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
       <tr><td>음차 + 한 단어</td><td><strong>배당</strong> 그로스업 비율이 몇 퍼센트인가요?</td><td>회수함</td>
-          <td>10%로 정확히 답함 <span class="tag ok">성공</span></td></tr>
+          <td>10%로 정확히 답함 <span class="tag ok">PASS</span></td></tr>
     </tbody>
     <caption>표 10. 네 질문 모두 같은 내용을 묻습니다. 실패한 것은 한글 음차 단독뿐이었습니다.</caption>
   </table></div>
@@ -948,14 +954,25 @@ if (decision.refused()) return refusal(...);       <span class="c">// 금액은 
   </p>
   <div class="ab">
     <div class="as"><div class="h4">AS-IS</div>
-      <p>문서가 법령 용어인 "배당가산"만 사용했습니다.</p>
+      <p>RAG 원본 문서가 법령 용어인 "배당가산"만 사용했습니다.</p>
       <p>임베딩이 한글 음차를 그 용어와 가깝게 보지 않아, 고객 표현으로 물으면 회수되지 않았습니다.</p></div>
-    <div class="to"><div class="h4">TO-BE</div>
-      <p>검색기를 바꾸는 것보다 <strong>문서에 고객이 쓰는 표기를 함께 적어 두는 편</strong>이 확실합니다.</p>
-      <p>임베딩이 두 표기를 같게 보도록 만들 수는 없지만, 문서에 둘 다 넣는 것은 우리가 할 수 있습니다.</p></div>
+    <div class="to"><div class="h4">TO-BE — 적용 후 확인</div>
+      <p><strong>코드가 아니라 RAG 원본 문서를 고쳤습니다.</strong>
+        <code>03-배당소득과-그로스업.md</code> 의 절 제목에 세 표기를 함께 적었습니다.
+        검색기·청킹·임계값은 그대로입니다.</p>
+      <p>임베딩이 두 표기를 같게 보도록 바꾸는 것은 우리 통제 밖이지만,
+        문서에 어떤 낱말을 적을지는 우리가 정할 수 있다고 판단했습니다.</p></div>
   </div>
-  <pre>- ## 배당가산율은 100분의 10이다
-+ ## 배당가산<span class="n">(그로스업, Gross-up)</span>율은 100분의 10이다</pre>
+  <pre><span class="c">// src/main/resources/tax-docs/03-배당소득과-그로스업.md</span>
+- ## 배당가산율은 100분의 10이다
++ ## 배당가산<span class="n">(그로스업, Gross-up)</span>율은 100분의 10이다
+
+- ## 배당가산 대상이 아닌 배당
++ ## 배당가산<span class="n">(그로스업)</span> 대상이 아닌 배당</pre>
+  <p>
+    고친 것은 <strong>문서 두 줄</strong>이고 자바 코드는 건드리지 않았습니다.
+    검색이 안 되는 원인이 검색 쪽이 아니라 <em>색인 대상인 문서 쪽</em>에 있었기 때문입니다.
+  </p>
   <p><strong>수정 후 같은 질문을 다시 던진 결과입니다.</strong></p>
   <div class="chat">
     <div class="t u"><div class="who">고객</div><div class="msg">그로스업 비율이 몇 퍼센트인가요?</div></div>
@@ -1031,7 +1048,7 @@ SafetyAdvisor:  100  또는  250</pre>
       <p>메모리 어드바이저의 order 를 지정하지 않아 기본값(<code>-2,147,483,448</code>)이 쓰였습니다.</p>
       <p>메모리가 항상 <code>SafetyAdvisor</code> 바깥에 놓이므로,
         <code>safety-order</code> 를 100 에서 250 으로 바꿔도 저장 여부가 달라지지 않았습니다.</p></div>
-    <div class="to"><div class="h4">TO-BE</div>
+    <div class="to"><div class="h4">TO-BE — 적용 후 확인</div>
       <p>비교할 두 어드바이저의 order 를 <strong>모두 명시</strong>합니다.
         한쪽만 설정으로 뽑아 두면 그 설정이 실제로 순서를 바꾸는지 알 수 없습니다.</p>
       <p>이제 <code>safety-order</code> 가 실제 변수로 작동합니다.</p></div>
@@ -1078,7 +1095,7 @@ SafetyAdvisor:  100  또는  250</pre>
     각 항목의 상세는 본문 해당 절에 있습니다.
   </p>
   <div class="tw"><table>
-    <thead><tr><th style="width:38mm">걸린 지점</th><th style="width:56mm">원인</th><th>개선</th></tr></thead>
+    <thead><tr><th style="width:38mm">걸린 지점</th><th style="width:56mm">원인</th><th>개선 · 개선 계획</th></tr></thead>
     <tbody>
       <tr><td>계정 간 대화 유출<br><span style="color:var(--muted)">§05</span></td>
           <td>대화방 ID를 고객이 보낸 값 그대로 사용함. 도구는 격리했으나 기억 계층이 우회함</td>
@@ -1103,7 +1120,7 @@ SafetyAdvisor:  100  또는  250</pre>
           <td><span class="tag ok">개선 완료</span> 답변의 <code>[출처]</code>를 <code>citations</code>와 <strong>코드로 대조</strong>하고, 없으면 내보내지 않음</td></tr>
       <tr><td>답이 문서에 있는데 검색 실패<br><span style="color:var(--muted)">§08</span></td>
           <td>임베딩이 한글 음차와 법령 용어를 다른 말로 봄. 영문 원어로 물으면 회수됨</td>
-          <td><span class="tag ok">개선 완료</span> 문서에 <strong>표기를 병기</strong>(배당가산·그로스업·Gross-up)</td></tr>
+          <td><span class="tag ok">개선 완료</span> <strong>RAG 원본 문서</strong>에 표기를 병기(배당가산·그로스업·Gross-up). 코드는 그대로 둠</td></tr>
       <tr><td>설정이 실제로 작동하지 않음<br><span style="color:var(--muted)">§09</span></td>
           <td>순서를 설정으로 뽑았으나 <strong>비교 대상의 순서를 지정하지 않음</strong></td>
           <td><span class="tag ok">개선 완료</span> 비교할 양쪽의 order를 <strong>모두 명시</strong></td></tr>
