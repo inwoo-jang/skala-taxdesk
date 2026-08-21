@@ -40,3 +40,7 @@ out/
 # 법령 원본(.doc)은 용량이 커서 제외한다. 추출한 .txt 만 커밋해도 조문 확인은 된다.
 docs/raw_law/*.doc
 .DS_Store
+
+# 실험 캡처 PNG 는 커밋하지 않는다 — 장당 1MB 라 저장소가 금방 불어난다.
+# 폴더 구조와 무엇을 증명하는지(README)는 남기고, 그림은 로컬에만 둔다.
+docs/captures/*.png

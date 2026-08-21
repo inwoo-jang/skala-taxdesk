@@ -140,6 +140,10 @@
       <label>conversationId</label>
       <input id="conv" value="demo-1">
     </div>
+    <div class="f">
+      <label>케이스 ID</label>
+      <input id="caseid" value="" placeholder="RT-13 · CA-07 … (파일명에 들어갑니다)">
+    </div>
     <button class="ghost" onclick="ping()">서버 상태 확인</button>
     <div class="hint">계정만 바꿔 같은 요청을 보내면 <b>소유자 격리</b>가 눈에 보입니다.</div>
   </div>
@@ -188,7 +192,11 @@ const SPEC = [
  ]},
  { group:'chat — 고객 상담', ops:[
    { m:'POST', path:'/chat', phase:'Phase 3·6', desc:'상담 질의. 라우팅 → RAG/Tool → 구조화 응답',
-     body:{ question:'', conversationId:'@conv' }, },
+     body:{ question:'',
+            otherIncome:'@num:이자·배당 외 종합소득금액 — 비우면 미상으로 두고 되묻습니다 (없으면 0)',
+            deduction:'@num:종합소득공제 합계 — 비우면 앞 턴 값 유지',
+            prepaidTax:'@num:근로·사업 기납부세액 — 비우면 앞 턴 값 유지',
+            conversationId:'@conv' }, },
    { m:'GET', path:'/chat/stream', phase:'Phase 6', desc:'SSE 스트리밍. 마지막 이벤트로 메타 전송',
      query:[['question','저 종합과세 대상인가요?'],['conversationId','@conv']] },
    { m:'GET', path:'/chat/history', phase:'Phase 5', desc:'세션 대화 내역',
@@ -262,8 +270,10 @@ function opBox(op){
 }
 
 function field(id, kind, name, val, big){
-  const v = val === '@conv' ? '' : val;
-  const ph = val === '@conv' ? '(conversationId 자동)' : '';
+  const num = typeof val === 'string' && val.startsWith('@num:');
+  const v = (val === '@conv' || num) ? '' : val;
+  const ph = val === '@conv' ? '(conversationId 자동)'
+           : num ? val.slice(5) : '';
   const inp = big
     ? `<textarea id="${id}-${kind}-${name}" placeholder="${ph}">${esc(v)}</textarea>`
     : `<input id="${id}-${kind}-${name}" value="${esc(v)}" placeholder="${ph}">`;
@@ -298,6 +308,13 @@ function buildRequest(id){
     body = {};
     Object.keys(op.body).forEach(k => {
       const d = op.body[k];
+      if (typeof d === 'string' && d.startsWith('@num:')){
+        // 비어 있으면 키 자체를 빼서 서버가 '미상'으로 보게 한다.
+        // ""를 보내면 Long 바인딩이 400 으로 떨어지고, 0 을 보내면 "없다고 답함"이 되어 버린다.
+        const raw = (val(id,'b',k) || '').replace(/[,\s원]/g,'');
+        if (raw !== '' && !isNaN(Number(raw))) body[k] = Number(raw);
+        return;
+      }
       body[k] = val(id,'b',k) || (d==='@conv' ? $('#conv').value : '');
     });
   }
@@ -406,13 +423,24 @@ async function capture(id){
   const op = window[id];
   const stamp = document.createElement('div');
   stamp.className = 'capnote';
-  stamp.textContent = `${op.m} ${op.path}  ·  계정: ${$('#acct').value.split(':')[0] || '없음'}  ·  ${new Date().toLocaleString('ko-KR')}`;
+  const cid = ($('#caseid').value || '').trim();
+  stamp.textContent = `${cid ? cid + '  ·  ' : ''}${op.m} ${op.path}`
+      + `  ·  계정: ${$('#acct').value.split(':')[0] || '없음'}`
+      + `  ·  방: ${$('#conv').value || '(자동)'}`
+      + `  ·  ${new Date().toLocaleString('ko-KR')}`;
   node.appendChild(stamp);
   try{
     const png = await nodeToPng(node);
     const a = document.createElement('a');
     a.href = png;
-    a.download = `${op.m}_${op.path.replace(/[\/{}]/g,'_')}.png`.replace(/_+/g,'_');
+    // 파일명이 곧 실험 기록이다. POST_chat(1)(2)(3) 으로 쌓이면 나중에 뭐가 뭔지 알 수 없다.
+    const parts = [
+      ($('#caseid').value || '').trim().replace(/[^\w.-]+/g,'-'),
+      ($('#acct').value.split(':')[0] || 'anon'),
+      ($('#conv').value || '').trim().replace(/[^\w.-]+/g,'-'),
+      op.m + op.path.replace(/[\/{}]/g,'_'),
+    ].filter(Boolean);
+    a.download = (parts.join('_') + '.png').replace(/_+/g,'_');
     a.click();
   }catch(e){
     alert('PNG 생성에 실패했습니다: ' + e.message + '\n\nOS 스크린샷(⌘⇧4)을 사용하세요.');

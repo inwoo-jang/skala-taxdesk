@@ -7,11 +7,13 @@ import com.inwoo.taxdesk.config.TaxDeskProperties;
 import com.inwoo.taxdesk.domain.IncomeType;
 import com.inwoo.taxdesk.domain.TaxCalculation;
 import com.inwoo.taxdesk.domain.TaxClassification;
+import com.inwoo.taxdesk.domain.TaxTreatment;
 import com.inwoo.taxdesk.tools.AccountIncomeTools;
 import com.inwoo.taxdesk.tools.TaxCalcTools;
 import com.inwoo.taxdesk.tools.ToolUser;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -106,6 +108,11 @@ public class TaxDeskService {
     }
 
     public AnswerDto ask(String userId, String conversationId, String question) {
+        return ask(userId, conversationId, question, null, null, null);
+    }
+
+    public AnswerDto ask(String userId, String conversationId, String question,
+                         Long otherIncome, Long deduction, Long prepaidTax) {
         long t0 = System.nanoTime();
         QueryRouter.Decision decision = router.route(question);
 
@@ -118,13 +125,17 @@ public class TaxDeskService {
 
         // 고객이 이번 턴에 말한 숫자를 대화 상태에 누적한다. 앞 턴 값은 유지된다.
         ConversationState.Facts known = state.merge(conversationId, question);
+        if (otherIncome != null || deduction != null || prepaidTax != null) {
+            // 고객이 입력란에 직접 넣은 값. 문장에서 긁어낸 값보다 확실하므로 뒤에 덮어쓴다.
+            known = state.override(conversationId, otherIncome, deduction, prepaidTax);
+        }
 
         List<AnswerDto.ToolCall> calls = new ArrayList<>();
         TaxCalculation calculation = null;
         String facts = "";
 
         if (decision.route() != Route.REGULATION) {
-            Facts f = gather(userId, decision.route(), known, calls);
+            Facts f = gather(userId, conversationId, decision.route(), known, calls);
             calculation = f.calculation();
             facts = f.text();
         }
@@ -153,8 +164,8 @@ public class TaxDeskService {
      * 도구를 코드가 정한 순서로 부른다. <b>모델이 순서를 정하게 두지 않는 이유</b>는
      * 분리과세 고객에게 세액을 계산해 보여주는 사고를 막기 위해서다.
      */
-    private Facts gather(String userId, Route route, ConversationState.Facts known,
-                         List<AnswerDto.ToolCall> calls) {
+    private Facts gather(String userId, String conversationId, Route route,
+                         ConversationState.Facts known, List<AnswerDto.ToolCall> calls) {
         ToolContext ctx = new ToolContext(ToolUser.contextOf(userId));
         StringBuilder sb = new StringBuilder();
 
@@ -186,7 +197,7 @@ public class TaxDeskService {
         }
         if (route == Route.SIMULATION) {
             var sim = calcTools.simulateHeadroom(cls.financialIncome(),
-                    income.domesticDividend(), known.otherIncome(), known.deduction());
+                    income.domesticDividend(), known.otherIncomeOrZero(), known.deduction());
             calls.add(new AnswerDto.ToolCall("simulateHeadroom",
                     "financialIncome=%d".formatted(cls.financialIncome()), sim.thresholdKind().name()));
             sb.append(describe(sim));
@@ -199,15 +210,21 @@ public class TaxDeskService {
             return new Facts(sb.toString(), null);
         }
 
-        // ④ 종합과세일 때만 계산
-        TaxCalculation calc = calcTools.calculateTax(cls.financialIncome(),
-                income.domesticDividend(), known.otherIncome(), known.deduction(),
-                income.withheldTax() + known.prepaidTax());
+        // ④ 종합과세 — 다른 종합소득을 모르면 계산하지 않고 되묻는다.
+        // 0 으로 놓고 계산한 뒤 "[전제] 0원으로 뒀습니다"를 붙이는 방식은 위험하다.
+        // 모델이 그 한 줄을 빼먹으면 "추가 납부하실 세액 없음"만 남는다.
         if (!known.hasOtherIncome()) {
-            // 모르는 값을 0 으로 놓고 계산했다는 사실을 숨기지 않는다.
-            sb.append("[전제] 이자·배당 외 종합소득(근로·사업 등)을 0원으로 두고 계산했습니다. ")
-              .append("금액을 알려주시면 다시 계산해 드립니다.\n");
+            state.awaitOtherIncome(conversationId);
+            sb.append("종합과세 대상입니다. 다만 세액을 계산하려면 이자·배당 외 종합소득")
+              .append("(근로·사업·연금·기타 소득금액)이 필요한데 아직 알려주시지 않았습니다.\n")
+              .append("세액 계산을 수행하지 않았습니다. 고객에게 그 금액을 여쭤보세요. ")
+              .append("해당 소득이 없으시면 \"없다\"고 답해 주시면 그대로 계산합니다.\n");
+            return new Facts(sb.toString(), null);
         }
+
+        TaxCalculation calc = calcTools.calculateTax(cls.financialIncome(),
+                income.domesticDividend(), known.otherIncomeOrZero(), known.deduction(),
+                income.withheldTax() + known.prepaidTax());
         calls.add(new AnswerDto.ToolCall("calculateTax",
                 "financialIncome=%d, grossUpEligible=%d".formatted(
                         cls.financialIncome(), income.domesticDividend()),
@@ -253,6 +270,15 @@ public class TaxDeskService {
      */
     private String compose(String question, String facts, List<Document> docs) {  // NOSONAR
         StringBuilder sb = new StringBuilder();
+        // 근거를 먼저, 고객 확정 사실을 나중에 넣는다.
+        // 뒤집으면 모델이 법령 일반론으로 답을 채우고 고객 금액을 흘린다.
+        if (!docs.isEmpty()) {
+            sb.append("[근거 — 이 안에서만 세법 내용을 인용하세요]\n");
+            docs.forEach(d -> sb.append("· 출처: ")
+                    .append(d.getMetadata().getOrDefault("article", ""))
+                    .append(" (").append(d.getMetadata().getOrDefault("effectiveYear", "")).append(" 귀속)\n")
+                    .append(d.getText()).append("\n\n"));
+        }
         if (!facts.isBlank()) {
             sb.append("""
                     ===== 확정 사실 (시스템이 이미 계산을 마친 결과) =====
@@ -260,15 +286,18 @@ public class TaxDeskService {
                     다시 계산하지 말고 그대로 인용해 설명만 하세요.
                     "정보가 부족하다", "계산할 수 없다"고 답하지 마세요. 필요한 값은 아래에 다 있습니다.
                     금액을 말할 때는 아래에 적힌 숫자를 그대로 옮겨 적으세요.
+                    고객이 특정 계좌·상품을 지목해 물으면 법령 일반론으로 답하지 말고,
+                    아래에서 그 상품의 금액과 과세처리를 찾아 금액을 밝혀 답하세요.
 
                     """).append(facts).append("\n\n");
-        }
-        if (!docs.isEmpty()) {
-            sb.append("[근거 — 이 안에서만 세법 내용을 인용하세요]\n");
-            docs.forEach(d -> sb.append("· 출처: ")
-                    .append(d.getMetadata().getOrDefault("article", ""))
-                    .append(" (").append(d.getMetadata().getOrDefault("effectiveYear", "")).append(" 귀속)\n")
-                    .append(d.getText()).append("\n\n"));
+            // 지시는 데이터 바로 뒤에 둔다. 앞머리에 두면 뒤따르는 법령 텍스트에 묻힌다.
+            if (facts.contains("빠진 것:")) {
+                sb.append("[지시] 고객이 그 상품을 지목해 물었습니다. 바로 위 \"빠진 것\" 줄의 "
+                        + "항목을 하나도 빠뜨리지 말고 상품명과 금액을 답변에 그대로 옮겨 적으세요. "
+                        + "그 금액은 고객이 실제로 받은 소득이지 법정 한도액이 아닙니다 — "
+                        + "\"비과세 한도가 N원\"처럼 바꿔 쓰면 틀린 답이 됩니다. "
+                        + "금액을 빼고 법령 일반론만 말하거나 \"금액이 확인되지 않는다\"고 답해서도 안 됩니다.\n\n");
+            }
         }
         if (facts.contains("결정세액")) {
             // 모델이 답변 말미에 반드시 붙이도록 프롬프트에도 싣는다.
@@ -330,10 +359,30 @@ public class TaxDeskService {
     }
 
     private static String summarize(AccountIncomeTools.IncomeSummary s) {
-        return ("%d년 이자 %,d원 · 국내배당 %,d원 · 해외배당 %,d원 → 과세대상 금융소득 %,d원 "
+        String head = ("%d년 이자 %,d원 · 국내배당 %,d원 · 해외배당 %,d원 → 과세대상 금융소득 %,d원 "
                 + "(비과세·분리과세 제외분 %,d원) / 원천징수 %,d원")
                 .formatted(s.year(), s.interest(), s.domesticDividend(), s.foreignDividend(),
                         s.taxableTotal(), s.excludedTotal(), s.withheldTax());
+
+        // 제외분은 총액이 아니라 상품명까지 싣는다. 도구가 items 로 목록을 주는데 여기서 버리면
+        // "제 ISA 는 왜 빠졌나요?"에 댈 근거가 없어진다.
+        // 종합과세 대상 행은 이미 위 합계에 있으므로 다시 싣지 않는다.
+        String excluded = s.items().stream()
+                .filter(i -> i.treatment() != TaxTreatment.TAXABLE)
+                .map(i -> "[%s] 에서 고객이 실제로 받은 소득 %,d원 — %s"
+                        .formatted(i.productName(), i.amount(), label(i.treatment())))
+                .collect(Collectors.joining(" · "));
+        return excluded.isEmpty() ? head
+                : head + "\n고객님이 보유한 상품 중 종합과세 판정에서 빠진 것: " + excluded;
+    }
+
+    /** "세금이 없습니다"와 "9%로 과세가 끝났습니다"는 다른 말이다. 뭉치면 답변 문구가 틀린다. */
+    private static String label(TaxTreatment t) {
+        return switch (t) {
+            case TAX_FREE -> "비과세 — 세금 자체가 없음";
+            case SEPARATE -> "분리과세 — 별도 세율로 과세 종결, 종합소득에 합산 안 함";
+            case TAXABLE -> "종합과세 대상";
+        };
     }
 
     private static String describe(com.inwoo.taxdesk.domain.TaxSimulation sim) {

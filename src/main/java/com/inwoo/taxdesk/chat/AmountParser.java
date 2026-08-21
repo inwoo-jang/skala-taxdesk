@@ -34,8 +34,49 @@ public final class AmountParser {
     private AmountParser() {
     }
 
+    /** "없어요" · "0원" 도 답이다. 못 알아들으면 같은 질문을 영원히 반복하게 된다. */
+    private static final Pattern NO_OTHER_INCOME = Pattern.compile(
+            "(다른|그\\s*밖의|이자.{0,4}배당\\s*외).{0,8}(소득|수입).{0,6}(없|0원|영원)"
+                    + "|(근로|사업|연금|기타)\\s*소득.{0,6}(없|0원)"
+                    + "|^\\s*(없어요|없습니다|없음|없다|전혀\\s*없)");
+
+    /** 되물은 다음 턴의 "5천만원이요" 처럼 항목명 없이 금액만 온 대답. */
+    private static final Pattern BARE_AMOUNT = Pattern.compile(
+            "^[^0-9억천만]{0,6}([0-9억천만,\\s]+)\\s*원?\\s*(?:이에?요|입니다|요|정도)?\\s*[.!]?$");
+
     public static Long otherIncome(String text) {
+        if (text != null && NO_OTHER_INCOME.matcher(text.trim()).find()) {
+            return 0L;   // 미상(null)이 아니라 "0 이라고 답했다"
+        }
         return find(OTHER_INCOME, text);
+    }
+
+    /**
+     * 항목명 없는 금액. <b>되물은 직후에만</b> 쓴다 —
+     * 아무 때나 쓰면 "2천만원 넘으면 어떻게 되나요?"의 2천만원을 소득으로 읽는다.
+     */
+    public static Long bareAmount(String text) {
+        if (text == null) {
+            return null;
+        }
+        Matcher m = BARE_AMOUNT.matcher(text.trim());
+        if (!m.find()) {
+            return null;
+        }
+        long v = parseKorean(m.group(1));
+        return v > 0 ? v : null;
+    }
+
+    /**
+     * 이번 턴이 <b>계산 입력값</b>을 담고 있는가. 담고 있으면 계산 경로로 보내야 한다.
+     *
+     * <p>"소득공제는 500만원이에요" 같은 진술은 질문처럼 안 생겨서 규정 질문으로 새기 쉽다.
+     * 그러면 도구가 안 돌고 모델이 새 세액을 암산해 버린다.
+     */
+    public static boolean mentionsCalcInput(String text) {
+        return text != null
+                && (otherIncome(text) != null || deduction(text) != null
+                        || prepaidTax(text) != null || externalAmount(text) != null);
     }
 
     public static Long deduction(String text) {

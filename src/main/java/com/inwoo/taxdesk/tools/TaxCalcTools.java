@@ -287,7 +287,15 @@ public class TaxCalcTools {
         return WON.format(amount);
     }
 
+    /**
+     * 0.14 를 "14" 로. {@code rate * 100} 을 먼저 하면 안 된다 —
+     * double 곱셈이 14.000000000000002 를 만들고 그게 그대로 고객 문구에 나간다.
+     * BigDecimal 로 옮긴 뒤 곱한다.
+     */
     private static String rateText(double rate) {
-        return BigDecimal.valueOf(rate * 100).stripTrailingZeros().toPlainString();
+        return BigDecimal.valueOf(rate)
+                .multiply(BigDecimal.valueOf(100))
+                .stripTrailingZeros()
+                .toPlainString();
     }
 }

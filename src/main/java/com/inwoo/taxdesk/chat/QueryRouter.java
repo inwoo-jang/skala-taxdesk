@@ -73,9 +73,17 @@ public class QueryRouter {
 
     private static final Pattern SIMULATION = Pattern.compile(
             "(얼마까지|더\\s*받아도|더\\s*받으면|넘지\\s*않으려|안\\s*넘으려|여유|한도.{0,4}남|미리\\s*점검)");
+    /**
+     * <b>상품명만으로는 ACTION 이 아니다.</b> "ISA 가입할래요"는 신청이지만
+     * "제 ISA 도 금융소득에 들어가나요?"는 판정 질문이다. 상품명을 리터럴로 넣으면
+     * 판정 질문까지 신청 경로로 새서 묻지도 않은 자격확인이 접수된다.
+     * 행동 의도가 있을 때만 잡는다.
+     */
     private static final Pattern ACTION = Pattern.compile(
-            "(가입|신청|줄일\\s*방법|절세|비과세\\s*상품|ISA|비과세종합저축|혜택.{0,6}상품)");
-    private static final Pattern MINE = Pattern.compile("(제|내|저의|나의|본인)\\s*(계좌|이자|배당|금융소득|세금)|저\\s*(종합과세|대상)");
+            "(가입|신청|줄일\\s*방법|절세|혜택.{0,6}상품)");
+    // 사이에 상품명이 끼어도 "내 것"이다 — "제 ISA 도 금융소득에" 처럼.
+    private static final Pattern MINE = Pattern.compile(
+            "(제|내|저의|나의|본인)\\s*\\S{0,8}\\s*(계좌|이자|배당|금융소득|세금)|저\\s*(종합과세|대상)");
 
     private final ChatClient router;
 
@@ -100,6 +108,11 @@ public class QueryRouter {
         if (ACTION.matcher(question).find()) {
             return Decision.of(Route.ACTION);
         }
+        // 계산 입력값(다른 소득·공제·기납부세액)을 말한 턴은 다시 계산해야 한다.
+        // 진술문은 질문처럼 안 생겨서 REGULATION 으로 새기 쉽다.
+        if (AmountParser.mentionsCalcInput(question)) {
+            return Decision.of(Route.CALCULATION);
+        }
         // 2단계 — 모델 1회 분류. 저비용 모델이고 도구·RAG 를 물지 않는다.
         try {
             String raw = router.prompt()
@@ -107,8 +120,11 @@ public class QueryRouter {
                             질문을 다음 중 하나로 분류하고 그 단어만 출력하세요.
                             REGULATION  세법 규정·개념 질문 (예: 배당소득 세율이 몇 퍼센트인가요?)
                             CALCULATION 본인 금액 조회나 주어진 숫자의 세액 계산
+                                        (예: 제 2026년 이자·배당 얼마인지 알려주세요)
                             HYBRID      본인 상황에 법 기준을 적용해 판정해야 하는 질문
-                            SIMULATION  앞으로 얼마까지 더 받아도 되는지 묻는 질문
+                            SIMULATION  앞으로 더 받아도 되는 한도를 묻는 질문만 해당한다.
+                                        "얼마까지 더", "더 받아도" 처럼 미래의 여유를 물어야 한다.
+                                        이미 받은 금액을 묻는 질문은 CALCULATION 이다
                             ACTION      상품 가입·신청 요청
                             다른 말은 절대 붙이지 마세요.""")
                     .user(question)
@@ -116,6 +132,12 @@ public class QueryRouter {
                     .content();
             Route r = parse(raw);
             if (r != null) {
+                // 본인을 가리켰는데 REGULATION 으로 분류되면 본인 데이터를 안 보고 일반론을 답한다.
+                // 최소 HYBRID 로 올린다. 모델 뒤에 두는 이유는, 앞에 두면 "제 이자·배당 얼마죠?"
+                // 같은 단순 조회까지 HYBRID 로 끌려와 RAG 비용을 헛되이 쓰기 때문이다.
+                if (r == Route.REGULATION && MINE.matcher(question).find()) {
+                    r = Route.HYBRID;
+                }
                 return Decision.of(r);
             }
         } catch (RuntimeException e) {
