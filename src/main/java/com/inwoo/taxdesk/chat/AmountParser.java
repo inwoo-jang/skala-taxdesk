@@ -15,18 +15,22 @@ import java.util.regex.Pattern;
  */
 public final class AmountParser {
 
+    // 금액 그룹은 반드시 숫자로 시작해야 한다. [0-9억천만,\s]+ 로만 두면 공백 하나에도 매칭돼
+    // 값이 0 으로 읽히고, 고객이 말한 금액이 조용히 사라진다.
+    private static final String AMOUNT = "([0-9][0-9억천만,\\s]*)\\s*원?";
+
     /** 근로소득금액 · 사업소득금액 등 "그 밖의 종합소득". 총급여는 일부러 제외한다. */
     private static final Pattern OTHER_INCOME = Pattern.compile(
-            "(근로소득금?액?|사업소득금?액?|연금소득금?액?|기타소득금?액?|다른\\s*소득)\\s*(?:이|가|은|는)?\\s*([0-9억천만,\\s]+)\\s*원?");
+            "(근로소득금?액?|사업소득금?액?|연금소득금?액?|기타소득금?액?|다른\\s*소득)[^0-9]{0,8}" + AMOUNT);
 
     private static final Pattern DEDUCTION = Pattern.compile(
-            "(소득공제|공제액?)\\s*(?:이|가|은|는)?\\s*([0-9억천만,\\s]+)\\s*원?");
+            "(소득공제|공제액?)[^0-9]{0,8}" + AMOUNT);
 
     private static final Pattern PREPAID = Pattern.compile(
-            "(결정세액|기납부|이미\\s*낸\\s*세금?|연말정산.{0,6}세액)\\s*(?:이|가|은|는)?\\s*([0-9억천만,\\s]+)\\s*원?");
+            "(결정세액|기납부|이미\\s*낸\\s*세금?|연말정산.{0,6}세액)[^0-9]{0,8}" + AMOUNT);
 
     private static final Pattern EXTERNAL = Pattern.compile(
-            "(타사|다른\\s*(?:증권사|은행)).{0,10}?([0-9억천만,\\s]+)\\s*원?");
+            "(타사|다른\\s*(?:증권사|은행))[^0-9]{0,12}" + AMOUNT);
 
     /** 총급여는 근로소득금액이 아니다. 그대로 쓰면 세액이 과대 산출된다. */
     private static final Pattern GROSS_PAY = Pattern.compile("총\\s*급여");

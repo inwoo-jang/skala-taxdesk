@@ -96,7 +96,9 @@ public class AiConfig {
                 .defaultAdvisors(
                         new AuditAdvisor(),
                         new SafetyAdvisor(props),
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
+                        // order 를 명시한다. 기본값(-2,147,483,448)이면 메모리가 항상 SafetyAdvisor
+                        // 바깥에 놓여, safety-order 를 100/250 으로 바꿔도 저장 여부가 달라지지 않는다.
+                        MessageChatMemoryAdvisor.builder(chatMemory).order(200).build(),
                         new TokenMeterAdvisor(meters, usage))
                 .build();
     }

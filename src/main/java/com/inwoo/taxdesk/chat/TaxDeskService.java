@@ -13,6 +13,8 @@ import com.inwoo.taxdesk.tools.TaxCalcTools;
 import com.inwoo.taxdesk.tools.ToolUser;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,18 +118,27 @@ public class TaxDeskService {
         long t0 = System.nanoTime();
         QueryRouter.Decision decision = router.route(question);
 
+        // 고객이 이번 턴에 말한 숫자를 먼저 저장한다. 앞 턴 값은 유지된다.
+        // 거절보다 앞에 둔다 — "타사 배당 1,000만원 더하면?" 은 거절 대상이지만
+        // 그 1,000만원은 다음 턴에 합산해야 할 값이다. 거절이 먼저면 금액이 유실된다.
+        ConversationState.Facts known = state.merge(conversationId, question);
+
         // 거절은 주 모델을 부르지 않는다. 토큰 0 이 이 설계의 증거이고, 응답에 그대로 드러난다.
         if (decision.refused()) {
             usage.record(userId, Route.OUT_OF_SCOPE.name(), 0, 0, ms(t0), false);
             return new AnswerDto(Route.OUT_OF_SCOPE, refusalMessage(decision.refusal()),
                     List.of(), List.of(), null, new AnswerDto.Tokens(0, 0), ms(t0), DISCLAIMER);
         }
-
-        // 고객이 이번 턴에 말한 숫자를 대화 상태에 누적한다. 앞 턴 값은 유지된다.
-        ConversationState.Facts known = state.merge(conversationId, question);
         if (otherIncome != null || deduction != null || prepaidTax != null) {
             // 고객이 입력란에 직접 넣은 값. 문장에서 긁어낸 값보다 확실하므로 뒤에 덮어쓴다.
             known = state.override(conversationId, otherIncome, deduction, prepaidTax);
+        }
+
+        // 총급여는 근로소득금액이 아니다. 그대로 받으면 세액이 과대 산출되므로 되묻는다.
+        if (AmountParser.mentionsGrossPay(question) && !known.hasOtherIncome()) {
+            usage.record(userId, decision.route().name(), 0, 0, ms(t0), false);
+            return new AnswerDto(decision.route(), GROSS_PAY_REASK,
+                    List.of(), List.of(), null, new AnswerDto.Tokens(0, 0), ms(t0), DISCLAIMER);
         }
 
         List<AnswerDto.ToolCall> calls = new ArrayList<>();
@@ -150,7 +161,7 @@ public class TaxDeskService {
         String context = compose(question, facts, docs);
         ChatResponse response = callModel(userId, conversationId, decision.route(), context, question);
 
-        String answer = response.getResult().getOutput().getText();
+        String answer = verifyCitations(response.getResult().getOutput().getText(), docs);
         var u = response.getMetadata() == null ? null : response.getMetadata().getUsage();
         AnswerDto.Tokens tokens = new AnswerDto.Tokens(
                 u == null || u.getPromptTokens() == null ? 0 : u.getPromptTokens(),
@@ -406,6 +417,67 @@ public class TaxDeskService {
                 .map(m -> m.getMessageType() + ": " + m.getText())
                 .toList();
     }
+
+    /** 총급여를 근로소득금액으로 오인하는 것은 실무에서 가장 흔한 오류다. 계산 대신 되묻는다. */
+    private static final String GROSS_PAY_REASK = """
+            종합소득에 합산되는 것은 총급여가 아니라 근로소득공제를 뺀 '근로소득금액'입니다. \
+            총급여로 계산하면 세액이 실제보다 크게 나옵니다. \
+            원천징수영수증의 '근로소득금액' 항목을 알려주시면 그 값으로 계산해 드리겠습니다. \
+            본 안내는 예상치이며 최종 판단은 세무 전문가와 상담하시기 바랍니다.""";
+
+    private static final Pattern CITED = Pattern.compile("\\[출처:\\s*([^\\](]+)");
+
+    /**
+     * 답변이 붙인 <code>[출처: …]</code> 가 실제 회수 결과에 있는 조문인지 확인한다.
+     *
+     * <p>프롬프트로 "근거에 없으면 지어내지 말라"고 요구했지만 지켜지지 않는 경우가 있었다.
+     * 회수되지 않은 조문을 출처로 달면 형식상 정상 답변과 구분되지 않으므로,
+     * 사람이 법령을 직접 찾아보기 전에는 틀린 줄 모른다. 그래서 코드가 대조한다.
+     */
+    private String verifyCitations(String answer, List<Document> docs) {
+        return groundCitations(answer, docs.stream()
+                .map(d -> String.valueOf(d.getMetadata().getOrDefault("article", "")))
+                .toList());
+    }
+
+    /**
+     * 답변이 회수되지 않은 조문을 인용하면 {@link #UNGROUNDED} 로 바꾼다.
+     * 인자로만 판단하도록 떼어 두었다 — 이 규칙은 테스트로 지켜야 하기 때문이다.
+     */
+    static String groundCitations(String answer, List<String> retrievedArticles) {
+        if (answer == null || retrievedArticles.isEmpty()) {
+            return answer;
+        }
+        List<String> allowed = retrievedArticles.stream()
+                .map(TaxDeskService::normalize)
+                .filter(a -> !a.isBlank())
+                .toList();
+        if (allowed.isEmpty()) {
+            return answer;
+        }
+        Matcher m = CITED.matcher(answer);
+        while (m.find()) {
+            String cited = normalize(m.group(1));
+            if (cited.isBlank()) {
+                continue;
+            }
+            boolean ok = allowed.stream().anyMatch(a -> a.contains(cited) || cited.contains(a));
+            if (!ok) {
+                log.warn("회수되지 않은 조문을 인용했다: {} (회수: {})", m.group(1).trim(), allowed);
+                return UNGROUNDED;
+            }
+        }
+        return answer;
+    }
+
+    /** 조문 표기가 "§17③"·"§ 17 ③"·"§17③ 각 호" 처럼 흔들리므로 공백과 귀속연도를 걷어낸다. */
+    private static String normalize(String article) {
+        return article.replaceAll("\\(.*?\\)", "").replaceAll("[\\s·]", "");
+    }
+
+    private static final String UNGROUNDED =
+            "확인되지 않습니다. 국세상담센터(126)로 문의해 주세요. "
+            + "본 안내는 예상치이며 최종 판단은 세무 전문가와 상담하시기 바랍니다.";
 
     private static long ms(long t0) {
         return (System.nanoTime() - t0) / 1_000_000;

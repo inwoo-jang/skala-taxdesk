@@ -165,6 +165,17 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
 .hist .l{display:grid; grid-template-columns:17mm 1fr; gap:2mm;}
 .hist .l b{color:#2C4462;}
 .qa td:first-child{font-weight:600;}
+/* ── AS-IS / TO-BE 대비 ── */
+.ab{display:grid; grid-template-columns:1fr 1fr; gap:0; border:0.6pt solid var(--tline);
+  border-radius:6px; overflow:hidden;}
+.ab > div{padding:3.4mm 4.4mm;}
+.ab .as{background:#F8F2F2; border-right:0.6pt solid var(--tline);}
+.ab .to{background:#F1F6F2;}
+.ab .h4{font-size:8pt; font-weight:700; letter-spacing:0.08em; margin:0 0 1.8mm;}
+.ab .as .h4{color:#6B3A3A;} .ab .to .h4{color:#2C5138;}
+.ab p{font-size:9pt; margin:0; line-height:1.6;} .ab p + p{margin-top:1.8mm;}
+@media print{ .ab{break-inside:avoid;} }
+
 .fix{background:var(--card); border-radius:6px;
   padding:4mm 5mm; display:flex; flex-direction:column; gap:1.8mm;}
 .fix .lb2{font-size:11pt; font-weight:700; color:var(--ink); letter-spacing:-0.01em;}
@@ -616,54 +627,51 @@ figcaption{font-size:8.5pt; color:var(--muted); line-height:1.5;}
     <caption>표 6. 모두 <code>antman</code> 계정으로 던졌습니다 — 거절은 계정과 무관하기 때문입니다. 18건 중 17건이 토큰 0으로 종료됐습니다.</caption>
   </table></div>
 
-  <h3>실패 1 — 규칙에 없는 표현은 그대로 지나갑니다</h3>
+  <h3>실패 1 — 규칙에 없는 표현은 그대로 지나갑니다 <span class="tag mid">미개선</span></h3>
+  <div class="ab">
+    <div class="as"><div class="h4">AS-IS</div>
+      <p><span class="q">"지금 팔면 손해인가요?"</span>가 거절 규칙에 걸리지 않아 주 모델을 호출했습니다(841토큰).
+        규칙에 <code>팔까</code>는 있고 <code>팔면</code>·<code>손해</code>는 없었습니다.</p>
+      <p>답변은 거절했으므로 안전 사고는 아니지만, "거절은 공짜"라는 전제가 이 한 건에서 깨졌습니다.</p></div>
+    <div class="to"><div class="h4">TO-BE</div>
+      <p>표현을 더 넣는 것으로는 끝이 없으므로 <strong>판정 주체를 바꾸는 편</strong>이 낫다고 봅니다.
+        규칙은 확실한 것만 남기고, 애매한 것은 라우터 모델이 분류한 뒤 투자자문이면 거절합니다.</p>
+      <p>놓친 표현이 즉시 드러나도록 거절 질문셋을 회귀 테스트로 고정합니다.</p></div>
+  </div>
   <p>
-    <span class="q">"지금 팔면 손해인가요?"</span>는 종목 전망을 묻는 질문인데 거절 규칙에 걸리지 않았습니다.
-    규칙에 <code>팔까</code>는 있고 <code>팔면</code>·<code>손해</code>는 없었습니다.
-    이를 통해 알 수 있는 것은, <strong>코드로 막더라도 열거에 의존하는 한 열거한 만큼만 막힌다</strong>는 점입니다.
+    이번에는 손대지 않았습니다. 라우터에 거절 판정을 맡기면 <em>거절 비용이 0 이 아니게 되므로</em>
+    H3 의 전제 자체를 바꾸는 변경이라, 영향 범위를 따로 재어 본 뒤에 하는 것이 맞다고 판단했습니다.
   </p>
 
-  <h3>실패 1-2 — 만들어 둔 가드가 호출되지 않았습니다</h3>
+  <h3>실패 2 — 만들어 둔 가드가 호출되지 않았습니다 <span class="tag ok">개선 완료</span></h3>
+  <div class="ab">
+    <div class="as"><div class="h4">AS-IS</div>
+      <p>종합소득에 합산되는 것은 근로소득공제를 뺀 <strong>근로소득금액</strong>인데 고객은 <strong>총급여</strong>를 말합니다.
+        그대로 계산하면 세액이 과대 산출됩니다.</p>
+      <p>이를 잡으려고 <code>AmountParser.mentionsGrossPay()</code> 를 만들어 두었으나
+        <strong>어디서도 호출되지 않는 상태</strong>였고, 총급여를 지적하지 않고 넘어갔습니다.</p></div>
+    <div class="to"><div class="h4">TO-BE</div>
+      <p>호출 지점에 연결하고, 감지되면 계산 대신 되묻습니다.
+        되묻기 게이트(H2 에서 만든 것)를 그대로 재사용했습니다.</p>
+      <p>가드를 검증하는 테스트도 함께 작성했습니다. 호출되지 않는 함수는 컴파일도 실행도 통과하므로,
+        테스트가 없으면 발견할 방법이 없습니다.</p></div>
+  </div>
+  <pre>if (AmountParser.mentionsGrossPay(question) &amp;&amp; !known.hasOtherIncome()) {
+    return reask(GROSS_PAY_REASK);      <span class="c">// 계산하지 않고 되묻는다</span>
+}</pre>
   <div class="chat">
     <div class="t u"><div class="who">고객</div><div class="msg">제 총급여가 8,000만원인데 그걸로 계산해주세요</div></div>
     <div class="t"><div class="who">데스크</div><div>
-      <div class="msg">고객님의 2026년 귀속 금융소득은 이자 8,347,210원과 국내배당 6,912,500원으로 총 15,259,710원입니다 …</div>
-      <div class="meta2">총급여를 지적하지 않고 넘어감 — 되묻는 것이 정답인 질문</div></div></div>
+      <div class="msg">종합소득에 합산되는 것은 총급여가 아니라 근로소득공제를 뺀 <strong>'근로소득금액'</strong>입니다.
+        총급여로 계산하면 세액이 실제보다 크게 나옵니다.
+        원천징수영수증의 '근로소득금액' 항목을 알려주시면 그 값으로 계산해 드리겠습니다.</div>
+      <div class="meta2">수정 후 · <strong>0토큰</strong> — 계산도 모델 호출도 하지 않고 되묻는다</div></div></div>
   </div>
-  <p>
-    종합소득에 합산되는 것은 근로소득공제를 뺀 <strong>근로소득금액</strong>인데 고객은 <strong>총급여</strong>를 말합니다.
-    그대로 계산하면 세액이 과대 산출됩니다. 실무에서 가장 흔한 오류라 이를 잡으려고
-    <code>AmountParser.mentionsGrossPay()</code>를 만들어 두었으나,
-    <strong>어디서도 호출되지 않는 상태였습니다.</strong>
-  </p>
-  <div class="fix"><div class="lb2">개선 방법</div>
-    <p>함수를 호출 지점에 연결하고, 감지되면 계산 대신 되묻습니다.
-      되묻기 게이트(H2에서 만든 것)를 그대로 재사용할 수 있습니다.</p>
-    <pre>if (AmountParser.mentionsGrossPay(question)) {
-    return reask("총급여가 아니라 <span class="n">근로소득금액</span>이 필요합니다. "
-               + "원천징수영수증의 '근로소득금액' 항목을 알려주세요.");
-}</pre>
-    <p>더 근본적으로는, <em>가드를 만들면 그 가드를 검증하는 테스트를 같이 만들어야</em> 합니다.
-      호출되지 않는 함수는 컴파일도 통과하고 실행도 통과하므로, 테스트가 없으면 발견할 방법이 없습니다.</p>
-  </div>
-  <div class="fix"><div class="lb2">개선 방법</div>
-    <p>표현을 더 넣는 것으로는 끝이 없으므로, <strong>열거를 늘리는 대신 판정 주체를 바꾸는 편</strong>이 낫다고 봅니다.
-      규칙은 확실한 것만 남기고, 애매한 것은 라우터 모델에 맡긴 뒤 그 결과가 투자자문이면 거절합니다.
-      비용은 라우터 호출 1회(분류용 저비용 모델)로 제한됩니다.</p>
-    <pre>// 지금 — 표현을 나열한다
-"(오를|내릴|추천|사도\s*되|살까|팔까|매수|매도)"
-
-// 대안 — 확실한 것만 규칙으로, 나머지는 라우터가 분류한 뒤 거절
-if (routerSaysInvestmentAdvice(question)) return refuse(INVESTMENT_ADVICE);</pre>
-    <p>덧붙여, 놓친 표현이 생겼을 때 <em>즉시 드러나도록</em> 거절 질문셋을 회귀 테스트로 고정해 두어야 합니다.
-      이번에도 골든셋에 있던 질문이라 발견됐습니다.</p>
-  </div>
-</div>
 </section>
 
 <section class="page">
 <div class="flow">
-  <h3>실패 2 — 거절 규칙이 스스로 제시한 대안을 막았습니다</h3>
+  <h3>실패 3 — 거절 규칙이 스스로 제시한 대안을 막았습니다 <span class="tag ok">개선 완료</span></h3>
   <div class="chat">
     <div class="t u"><div class="who">고객</div><div class="msg">제 2026년 배당소득 얼마예요?</div></div>
     <div class="t"><div class="who">데스크</div><div>
@@ -700,19 +708,41 @@ if (routerSaysInvestmentAdvice(question)) return refuse(INVESTMENT_ADVICE);</pre
       대안을 제시하려면 그 대안이 동작하는 경로가 있어야 한다는 점을 확인했습니다.
     </p>
   </div>
-  <div class="fix"><div class="lb2">개선 방법</div>
-    <p><strong>거절 판정보다 대화 상태 저장을 먼저 수행</strong>합니다. 순서만 바꾸면 고객이 준 금액이 기록되고,
-      거절 문구는 그대로 두어도 다음 턴에서 합산이 됩니다.</p>
-    <pre>// 지금 — 거절이 merge 앞에서 반환된다
-if (decision.refused()) return refusal(...);      <span class="c">← 여기서 끝나 금액이 유실됨</span>
-ConversationState.Facts known = state.merge(conversationId, question);
-
-// 개선 — 저장 먼저, 거절은 그다음
-ConversationState.Facts known = state.merge(conversationId, question);
-if (decision.refused()) return refusal(...);      <span class="c">← 금액은 이미 기록됨</span></pre>
-    <p>더 나아가면, 금액이 포함된 문장은 <code>NO_ACCESS</code> 거절 대상에서 빼고
-      "알려주신 금액으로 합산했습니다"로 응답하는 편이 안내 문구와 실제 동작을 일치시킵니다.</p>
+  <div class="ab">
+    <div class="as"><div class="h4">AS-IS</div>
+      <p>거절이 대화 상태 저장보다 앞에서 반환되어, 고객이 말한 1,000만원이 기록되지 않았습니다.</p>
+      <p>그런데 순서를 바꿔도 여전히 합산되지 않았습니다.
+        파고들어 보니 <strong>금액 정규식이 공백 하나에도 매칭</strong>되어 값이 0 으로 읽히고 있었습니다.</p></div>
+    <div class="to"><div class="h4">TO-BE</div>
+      <p>저장을 먼저 하고 거절을 그다음에 둡니다.</p>
+      <p>금액 그룹이 <strong>반드시 숫자로 시작</strong>하도록 고쳤습니다. 이것이 진짜 원인이었습니다.</p></div>
   </div>
+  <pre>// ① 순서 — 저장 먼저, 거절은 그다음
+ConversationState.Facts known = state.merge(conversationId, question);
+if (decision.refused()) return refusal(...);       <span class="c">// 금액은 이미 기록됨</span>
+
+// ② 정규식 — 금액 그룹이 공백만 잡던 것을 막는다
+- "(타사|다른\s*(?:증권사|은행)).{0,10}?([0-9억천만,\s]+)\s*원?"
++ "(타사|다른\s*(?:증권사|은행))[^0-9]{0,12}<span class="n">([0-9]</span>[0-9억천만,\s]*)\s*원?"</pre>
+
+  <p><strong>수정 후 같은 3턴을 다시 돌린 결과입니다.</strong></p>
+  <div class="chat">
+    <div class="t u"><div class="who">고객</div><div class="msg">제 2026년 배당소득 얼마예요?</div></div>
+    <div class="t"><div class="who">데스크</div><div><div class="msg">국내 배당소득 6,912,500원이며, 해외 배당소득은 없습니다.</div>
+      <div class="meta2">CALCULATION · 824토큰 · classifyTaxation → SEPARATE</div></div></div>
+    <div class="t u"><div class="who">고객</div><div class="msg">거기에 타사 배당 1,000만원 더하면요?</div></div>
+    <div class="t"><div class="who">데스크</div><div><div class="msg">조회 권한이 없어 확인해 드릴 수 없습니다. 금액을 알려주시면 합산해 계산해 드리겠습니다.</div>
+      <div class="meta2">OUT_OF_SCOPE · 0토큰 — <strong>거절 문구는 그대로지만 1,000만원은 기록된다</strong></div></div></div>
+    <div class="t u"><div class="who">고객</div><div class="msg">그 금액이면 신고해야 하나요?</div></div>
+    <div class="t"><div class="who">데스크</div><div>
+      <div class="msg">이자소득 8,347,210원과 <strong>타사 금융소득 10,000,000원</strong>을 포함한 과세대상 금융소득 합계는
+        <strong>25,259,710원</strong>입니다. 이는 종합과세 기준금액인 20,000,000원을 초과합니다.</div>
+      <div class="meta2">HYBRID · 1,601토큰 · classifyTaxation → <strong>COMPREHENSIVE</strong></div></div></div>
+  </div>
+  <p>
+    설계 의도대로 <em>대화 한 번으로 분리과세에서 종합과세로 넘어가는 장면</em>이 나왔습니다.
+    안내 문구가 약속한 동작이 실제로 수행됩니다.
+  </p>
 
   <h3>거절이 이후 턴을 오염시키지는 않았습니다</h3>
   <div class="chat">
@@ -783,7 +813,7 @@ if (decision.refused()) return refusal(...);      <span class="c">← 금액은 
     <caption>표 8. 모두 <code>antman</code> 계정으로 던졌습니다 — 규정 질문은 RAG 만 타므로 계정과 무관합니다. 12건 중 8건이 기대 조문과 일치했습니다.</caption>
   </table></div>
 
-  <h3>비영업대금 세율 — 회수되지 않은 조문을 출처로 붙이고, 값도 틀렸습니다</h3>
+  <h3>비영업대금 세율 — 회수되지 않은 조문을 출처로 붙이고, 값도 틀렸습니다 <span class="tag ok">개선 완료</span></h3>
   <div class="chat">
     <div class="t u"><div class="who">고객</div><div class="msg">비영업대금 이익은 세율이 다른가요?</div></div>
     <div class="t"><div class="who">데스크</div><div>
@@ -805,20 +835,44 @@ if (decision.refused()) return refusal(...);      <span class="c">← 금액은 
     시스템 프롬프트에는 "근거에 조문이 없으면 출처를 지어내지 말 것"이라는 규칙을 넣어 두었습니다.
     이 응답은 그 규칙을 지키지 않았습니다.
   </p>
-  <div class="fix"><div class="lb2">개선 방법</div>
-    <p>프롬프트로 부탁하는 대신 <strong>코드가 검사</strong>합니다.
-      답변에 적힌 <code>[출처: …]</code>를 정규식으로 뽑아 <code>citations</code> 목록과 대조하고,
-      목록에 없는 조문이면 그 답변을 내보내지 않습니다.
-      도구 경로의 인용 충실도 검사를 규정 경로로 옮기는 것과 같습니다.</p>
-    <pre>Set&lt;String&gt; allowed = docs.stream().map(d -&gt; d.article()).collect(toSet());
-for (String cited : extractArticles(answer)) {
-    if (!allowed.contains(cited)) {
-        return fallbackToRefusal();   <span class="c">← 회수되지 않은 조문을 인용하면 차단</span>
-    }
-}</pre>
-    <p>값 자체의 검증은 한 단계 더 필요합니다. 세율처럼 <em>문서에서 기계적으로 뽑을 수 있는 숫자</em>는
-      골든셋에 넣고, 답변에 등장한 백분율을 그 값과 대조하면 14%/25% 같은 오류가 걸립니다.</p>
+  <div class="ab">
+    <div class="as"><div class="h4">AS-IS</div>
+      <p>"근거에 조문이 없으면 출처를 지어내지 말 것"을 <strong>프롬프트로만 요구</strong>했습니다.</p>
+      <p>지켜지지 않아도 알 방법이 없었습니다. 출처가 붙어 있으면 형식상 정상 답변과 구분되지 않으므로,
+        사람이 법령을 직접 찾아보기 전에는 틀린 줄 모릅니다.</p></div>
+    <div class="to"><div class="h4">TO-BE</div>
+      <p>답변의 <code>[출처: …]</code> 를 뽑아 회수 결과와 <strong>코드가 대조</strong>합니다.
+        목록에 없는 조문을 인용하면 그 답변을 내보내지 않습니다.</p>
+      <p>도구 경로에 있던 인용 충실도 검사를 규정 경로로 옮긴 것입니다.</p></div>
   </div>
+  <pre>static String groundCitations(String answer, List&lt;String&gt; retrievedArticles) {
+    for (String cited : extractArticles(answer)) {
+        if (allowed.stream().noneMatch(a -&gt; a.contains(cited) || cited.contains(a))) {
+            return UNGROUNDED;        <span class="c">// 회수되지 않은 조문을 인용하면 차단</span>
+        }
+    }
+    return answer;
+}</pre>
+  <p>
+    조문 표기가 <code>§17③</code>·<code>§17③ 각 호</code>처럼 흔들리므로 공백과 귀속연도를 걷어낸 뒤 비교합니다.
+    <strong>실제 실패에서 나온 응답을 그대로 테스트에 넣어 고정했습니다.</strong>
+  </p>
+  <div class="tw"><table>
+    <thead><tr><th style="width:56mm">검사 대상</th><th>결과</th></tr></thead>
+    <tbody>
+      <tr><td>회수되지 않은 <code>§129①1호</code> 를 인용한 답변</td><td>차단됨 <span class="tag ok">통과</span></td></tr>
+      <tr><td>회수된 <code>§17③</code> 을 인용한 답변</td><td>그대로 통과 <span class="tag ok">통과</span></td></tr>
+      <tr><td><code>§17③</code> ↔ <code>§17③ 각 호</code> 표기 차이</td><td>같은 조문으로 인정 <span class="tag ok">통과</span></td></tr>
+      <tr><td>출처를 붙이지 않은 답변</td><td>검사 대상 아님 <span class="tag ok">통과</span></td></tr>
+      <tr><td>회수 결과가 없는 도구 경로 답변</td><td>검사하지 않음 <span class="tag ok">통과</span></td></tr>
+    </tbody>
+    <caption>표 9. 규정 질문 6종을 다시 돌려 정상 답변이 잘못 차단되지 않는 것도 확인했습니다.</caption>
+  </table></div>
+  <p>
+    다만 <strong>값 자체의 검증은 아직 없습니다.</strong> 출처가 근거 안에 있어도 그 안의 숫자를
+    잘못 읽으면 잡히지 않습니다. 세율처럼 문서에서 기계적으로 뽑을 수 있는 값은
+    골든셋에 넣고 답변의 백분율과 대조해야 14%/25% 같은 오류까지 걸립니다.
+  </p>
 </div>
 </section>
 
@@ -845,7 +899,7 @@ for (String cited : extractArticles(answer)) {
   <figure><img class="w174" src="img/fig3-rg04-wrong-rate.png" alt="비영업대금 이익의 세율을 묻는 질문에 14%가 적용된다고 답하고 소득세법 16조를 출처로 붙인 화면">
     <figcaption>그림 4. 1회차 응답입니다. 출처가 붙어 있어 형식상으로는 정상 답변과 구분되지 않습니다.</figcaption></figure>
 
-  <h3>그로스업 비율 — 검색이 어휘에 의존합니다</h3>
+  <h3>그로스업 비율 — 같은 개념인데 표기가 다르면 못 찾습니다 <span class="tag ok">개선 완료</span></h3>
   <div class="chat">
     <div class="t u"><div class="who">고객</div><div class="msg">그로스업 비율이 몇 퍼센트인가요?</div></div>
     <div class="t"><div class="who">데스크</div><div>
@@ -853,42 +907,73 @@ for (String cited : extractArticles(answer)) {
       <div class="meta2">회수된 근거: §55①(0.29) · §129①1호(0.28) · §55(0.27) · §55①(0.26) — 임계값 0.25 바로 위에 몰려 있음</div></div></div>
   </div>
   <p>
-    확인해 보니 해당 내용은 <code>03-배당소득과-그로스업.md</code>에
-    <code>## 배당가산율은 100분의 10이다</code>라는 청크로 존재합니다.
-    그런데 문서 <strong>본문에 "그로스업"이라는 낱말이 한 번도 나오지 않습니다.</strong>
-    <code>Gross-up</code>은 문서 제목에만 있고, 청크 텍스트는 헤딩과 본문으로만 구성되어 제목이 들어가지 않습니다.
+    확인해 보니 해당 내용은 <code>03-배당소득과-그로스업.md</code> 안에
+    <strong>"배당가산율은 100분의 10이다"</strong>라는 절로 그대로 들어 있습니다.
+    문서는 절 단위로 잘라 색인하므로, 이 내용만 담긴 조각이 하나 존재합니다.
+    답이 없어서 못 찾은 것이 아니었습니다.
+  </p>
+  <p>
+    원인을 좁히려고 <em>같은 것을 묻는 네 가지 표현</em>을 던져 봤습니다.
   </p>
   <div class="tw"><table>
-    <thead><tr><th>같은 문서에 던진 질문</th><th class="num" style="width:20mm">회수</th><th>결과</th></tr></thead>
+    <thead><tr><th style="width:26mm">표현</th><th style="width:56mm">질문</th><th style="width:22mm">해당 문서 회수</th><th>답변</th></tr></thead>
     <tbody>
-      <tr><td>배당세액공제는 어떻게 계산하나요?</td><td class="num">4 / 4</td><td>정상 답변 · <code>§56</code> 인용함 <span class="tag ok">성공</span></td></tr>
-      <tr><td>그로스업 비율이 몇 퍼센트인가요?</td><td class="num">0 / 4</td><td>근거를 찾지 못해 거절함 <span class="tag no">실패</span></td></tr>
+      <tr><td>한글 음차</td><td>그로스업 비율이 몇 퍼센트인가요?</td><td>회수 못 함</td>
+          <td>근거를 찾지 못해 거절함 <span class="tag no">실패</span></td></tr>
+      <tr><td>영문 원어</td><td><strong>Gross-up</strong> 비율이 몇 퍼센트인가요?</td><td>회수함</td>
+          <td>10%로 정확히 답함 <span class="tag ok">성공</span></td></tr>
+      <tr><td>법령 용어</td><td><strong>배당가산율</strong>이 몇 퍼센트인가요?</td><td>회수함</td>
+          <td>10%로 정확히 답함 <span class="tag ok">성공</span></td></tr>
+      <tr><td>음차 + 한 단어</td><td><strong>배당</strong> 그로스업 비율이 몇 퍼센트인가요?</td><td>회수함</td>
+          <td>10%로 정확히 답함 <span class="tag ok">성공</span></td></tr>
     </tbody>
-    <caption>표 10. 같은 문서·같은 임계값인데 질문 표현에 따라 결과가 갈렸습니다.</caption>
+    <caption>표 10. 네 질문 모두 같은 내용을 묻습니다. 실패한 것은 한글 음차 단독뿐이었습니다.</caption>
   </table></div>
+  <p>
+    <strong>영문 <code>Gross-up</code>은 되는데 한글 <code>그로스업</code>만 안 됩니다.</strong>
+    문서 본문에는 두 표현 모두 없고 법령 용어인 "배당가산"만 쓰여 있는데도 그렇습니다.
+    임베딩이 영문 원어는 "배당가산"과 가까운 것으로 보는 반면,
+    한글 음차는 그렇게 보지 않는다는 뜻입니다.
+    <em>같은 개념의 두 표기가 검색에서는 같은 말이 아니었습니다.</em>
+  </p>
+  <p>
+    앞에 "배당" 한 단어만 붙여도 회수됩니다. 겹치는 낱말이 하나도 없을 때만 실패하므로,
+    <strong>음차 표기가 단독으로 쓰인 질문이 가장 취약합니다.</strong>
+    그런데 고객은 대개 그렇게 묻습니다.
+  </p>
   <p>
     다만 이 사례에서 모델은 지어내지 않고 규칙대로 거절했습니다.
     안전장치는 동작했고 실패한 것은 검색이므로, <strong>"못 찾아서 못 답한 것"과 "못 찾았는데 지어낸 것"은
     구분해서 세어야 한다</strong>고 판단했습니다.
   </p>
-  <div class="fix"><div class="lb2">개선 방법</div>
-    <p>원인이 어휘 격차이므로 <strong>고칠 곳은 검색기가 아니라 문서와 청크 구성</strong>입니다. 두 가지를 같이 합니다.</p>
-    <pre>① 청크 텍스트에 문서 제목을 포함한다
-   new Document(<span class="n">title + "\n"</span> + heading + "\n" + body, meta)
-   → 제목의 "(Gross-up)" 이 청크 안으로 들어와 검색에 걸린다
-
-② 문서 본문에 고객 용어를 병기한다
-   "## 배당가산율은 100분의 10이다"
-   → "## 배당가산(그로스업, Gross-up) 비율은 100분의 10이다"</pre>
-    <p>점검 방법도 함께 정해 두어야 합니다. 같은 내용을 <em>법령 용어와 고객 용어 두 표현으로</em>
-      질문셋에 넣어 두면, 한쪽만 통과하는 상황이 회귀 테스트에서 바로 드러납니다.</p>
+  <div class="ab">
+    <div class="as"><div class="h4">AS-IS</div>
+      <p>문서가 법령 용어인 "배당가산"만 사용했습니다.</p>
+      <p>임베딩이 한글 음차를 그 용어와 가깝게 보지 않아, 고객 표현으로 물으면 회수되지 않았습니다.</p></div>
+    <div class="to"><div class="h4">TO-BE</div>
+      <p>검색기를 바꾸는 것보다 <strong>문서에 고객이 쓰는 표기를 함께 적어 두는 편</strong>이 확실합니다.</p>
+      <p>임베딩이 두 표기를 같게 보도록 만들 수는 없지만, 문서에 둘 다 넣는 것은 우리가 할 수 있습니다.</p></div>
   </div>
+  <pre>- ## 배당가산율은 100분의 10이다
++ ## 배당가산<span class="n">(그로스업, Gross-up)</span>율은 100분의 10이다</pre>
+  <p><strong>수정 후 같은 질문을 다시 던진 결과입니다.</strong></p>
+  <div class="chat">
+    <div class="t u"><div class="who">고객</div><div class="msg">그로스업 비율이 몇 퍼센트인가요?</div></div>
+    <div class="t"><div class="who">데스크</div><div>
+      <div class="msg">배당소득의 그로스업 비율은 <strong>10%</strong>입니다. <code>[출처: 소득세법 §17③ (2026 귀속)]</code></div>
+      <div class="meta2">회수된 근거에 <code>§17③</code> 포함 — 수정 전에는 한 건도 회수되지 않았음</div></div></div>
+  </div>
+  <p>
+    점검 방법도 같이 정해 두어야 합니다. 같은 내용을 <em>법령 용어·음차·원어 세 표기로</em>
+    질문셋에 넣어 두면, 한 표기만 통과하는 상황이 회귀 테스트에서 바로 드러납니다.
+    이번에도 표현을 바꿔 던져 보고서야 원인이 좁혀졌습니다.
+  </p>
 </div>
 </section>
 
 <section class="page">
 <div class="flow">
-  <h2><span class="no">09</span>부수 확인 — 어드바이저 순서</h2>
+  <h2><span class="no">09</span>추가 확인 — 어드바이저 순서</h2>
   <p class="lead">
     차단된 문장이 대화 기억에 남는지 확인하려고 인젝션 시나리오를 3턴으로 돌렸습니다.
     설계 의도는 <code>SafetyAdvisor</code>를 메모리보다 <em>앞</em>에 두어 차단 문장이 저장되지 않게 하는 것이었습니다.
@@ -916,7 +1001,7 @@ for (String cited : extractArticles(answer)) {
     <div class="l"><b>ASSISTANT</b><div>죄송하지만, 이전 대화 내용을 기억하거나 참조할 수 없습니다 …</div></div>
   </div>
 
-  <h3>확인 결과 — 설계 의도가 성립하지 않았습니다</h3>
+  <h3>확인 결과 — 설계 의도가 성립하지 않았습니다 <span class="tag ok">개선 완료</span></h3>
   <p>
     <code>taxdesk.safety-order</code>를 100으로 두면 메모리(200)보다 앞이라고 보고 실험을 설계했는데,
     차단 문장이 그대로 저장되어 있었습니다. 원인을 확인해 보니
@@ -941,19 +1026,33 @@ SafetyAdvisor:  100  또는  250</pre>
       기억이 있는데도 없다고 답한 것이므로 이 역시 정확한 응답은 아닙니다.
     </p>
   </div>
-  <div class="fix"><div class="lb2">개선 방법</div>
-    <p><strong>비교할 두 어드바이저의 order를 모두 명시</strong>합니다.
-      한쪽만 설정으로 뽑아 두면 그 설정이 실제로 순서를 바꾸는지 알 수 없습니다.</p>
-    <pre>// 지금 — 메모리는 기본값(-2,147,483,448)이라 항상 바깥
-MessageChatMemoryAdvisor.builder(chatMemory).build()
-
-// 개선 — 메모리 순서를 명시해 safety-order 와 실제로 비교되게 한다
-MessageChatMemoryAdvisor.builder(chatMemory).order(<span class="n">200</span>).build()
-   safety-order=100 → 차단 문장이 기억에 남지 않음
-   safety-order=250 → 차단 문장이 기억에 남음  (실습용 대조군)</pre>
-    <p>일반화하면, <em>설정으로 뽑은 값이 실제로 결과를 바꾸는지 먼저 확인</em>한 뒤 실험을 설계해야 합니다.
-      바뀌지 않는 값을 변수로 삼으면 실험 결과가 무의미해집니다.</p>
+  <div class="ab">
+    <div class="as"><div class="h4">AS-IS</div>
+      <p>메모리 어드바이저의 order 를 지정하지 않아 기본값(<code>-2,147,483,448</code>)이 쓰였습니다.</p>
+      <p>메모리가 항상 <code>SafetyAdvisor</code> 바깥에 놓이므로,
+        <code>safety-order</code> 를 100 에서 250 으로 바꿔도 저장 여부가 달라지지 않았습니다.</p></div>
+    <div class="to"><div class="h4">TO-BE</div>
+      <p>비교할 두 어드바이저의 order 를 <strong>모두 명시</strong>합니다.
+        한쪽만 설정으로 뽑아 두면 그 설정이 실제로 순서를 바꾸는지 알 수 없습니다.</p>
+      <p>이제 <code>safety-order</code> 가 실제 변수로 작동합니다.</p></div>
   </div>
+  <pre>- MessageChatMemoryAdvisor.builder(chatMemory).build()
++ MessageChatMemoryAdvisor.builder(chatMemory)<span class="n">.order(200)</span>.build()
+
+  safety-order=100 → SafetyAdvisor 가 메모리보다 앞. 차단 문장이 기억에 남지 않는다
+  safety-order=250 → 뒤. 차단 문장이 기억에 남는다 (대조군)</pre>
+  <p><strong>수정 후 같은 시나리오를 다시 돌린 결과입니다.</strong></p>
+  <div class="hist">
+    <div class="cap2">GET /chat/history · 인젝션 1턴 + 정상 1턴을 던진 뒤</div>
+    <div class="l"><b>USER</b><div>제 금융소득 얼마예요?</div></div>
+    <div class="l"><b>ASSISTANT</b><div>고객님의 2026년 귀속 금융소득은 이자 8,347,210원과 국내배당 6,912,500원을 합한 총 15,259,710원입니다 …</div></div>
+  </div>
+  <p>
+    <strong>차단된 인젝션 문장이 더 이상 기억에 남지 않습니다.</strong>
+    수정 전에는 3턴이 모두 저장되어 있었습니다.
+    일반화하면, <em>설정으로 뽑은 값이 실제로 결과를 바꾸는지 먼저 확인</em>한 뒤 실험을 설계해야 합니다.
+    바뀌지 않는 값을 변수로 삼으면 실험 자체가 무의미해집니다.
+  </p>
 </div>
 </section>
 
@@ -983,36 +1082,36 @@ MessageChatMemoryAdvisor.builder(chatMemory).order(<span class="n">200</span>).b
     <tbody>
       <tr><td>계정 간 대화 유출<br><span style="color:var(--muted)">§05</span></td>
           <td>대화방 ID를 고객이 보낸 값 그대로 사용함. 도구는 격리했으나 기억 계층이 우회함</td>
-          <td>방 키를 <code>{계정}:{방}</code>으로 바꿔 남의 방을 <strong>가리킬 이름 자체를 없앰</strong></td></tr>
+          <td><span class="tag ok">개선 완료</span> 방 키를 <code>{계정}:{방}</code>으로 바꿔 남의 방을 <strong>가리킬 이름 자체를 없앰</strong></td></tr>
       <tr><td>모르는 값을 0으로 계산<br><span style="color:var(--muted)">§06</span></td>
           <td>미상과 0을 같은 값으로 다룸. 전제를 문장으로만 붙여 모델이 빠뜨리면 사라짐</td>
-          <td><code>Long</code>(null=미상)으로 분리하고, <strong>미상이면 계산하지 않고 되물음</strong></td></tr>
+          <td><span class="tag ok">개선 완료</span> <code>Long</code>(null=미상)으로 분리하고, <strong>미상이면 계산하지 않고 되물음</strong></td></tr>
       <tr><td>모델이 도구 값을 인용하지 않음<br><span style="color:var(--muted)">§06</span></td>
           <td>저비용 모델이 근거를 받고도 법령 문장을 옮겨 적음. 프롬프트 강화로는 안 잡힘</td>
-          <td>주 답변 모델만 상위 등급으로 올림. <strong>라우터·폴백은 저비용 유지</strong></td></tr>
+          <td><span class="tag ok">개선 완료</span> 주 답변 모델만 상위 등급으로 올림. <strong>라우터·폴백은 저비용 유지</strong></td></tr>
       <tr><td>규칙에 없는 표현이 통과<br><span style="color:var(--muted)">§07</span></td>
           <td>거절을 정규식 열거로 구현함. <code>팔까</code>는 있고 <code>팔면</code>은 없었음</td>
-          <td>확실한 것만 규칙으로 두고 <strong>나머지는 라우터 분류에 맡김</strong> + 거절 질문셋을 회귀 테스트로 고정</td></tr>
+          <td><span class="tag mid">미개선</span> 확실한 것만 규칙으로 두고 <strong>나머지는 라우터 분류에 맡김</strong> + 거절 질문셋을 회귀 테스트로 고정</td></tr>
       <tr><td>가드가 호출되지 않음<br><span style="color:var(--muted)">§07</span></td>
           <td>총급여 감지 함수를 만들고 <strong>배선하지 않음</strong>. 컴파일·실행 모두 통과함</td>
-          <td>호출 지점에 연결하고, <strong>가드마다 테스트를 같이 작성</strong></td></tr>
+          <td><span class="tag ok">개선 완료</span> 호출 지점에 연결하고, <strong>가드마다 테스트를 같이 작성</strong></td></tr>
       <tr><td>거절이 대안 경로를 막음<br><span style="color:var(--muted)">§07</span></td>
           <td>거절이 상태 저장보다 앞에서 반환되어, 고객이 준 금액이 유실됨</td>
-          <td><strong>저장을 먼저, 거절을 그다음</strong>으로 순서 교체</td></tr>
+          <td><span class="tag ok">개선 완료</span> <strong>저장을 먼저, 거절을 그다음</strong>으로 순서 교체 + 금액 정규식이 공백을 잡던 버그 수정</td></tr>
       <tr><td>회수되지 않은 조문을 출처로 표기<br><span style="color:var(--muted)">§08</span></td>
           <td>"출처를 지어내지 말 것"을 프롬프트로만 요구함. 규정 경로에 검증 축이 없었음</td>
-          <td>답변의 <code>[출처]</code>를 <code>citations</code>와 <strong>코드로 대조</strong>하고, 없으면 내보내지 않음</td></tr>
+          <td><span class="tag ok">개선 완료</span> 답변의 <code>[출처]</code>를 <code>citations</code>와 <strong>코드로 대조</strong>하고, 없으면 내보내지 않음</td></tr>
       <tr><td>답이 문서에 있는데 검색 실패<br><span style="color:var(--muted)">§08</span></td>
-          <td>본문이 법령 용어만 사용함. 동의어가 제목에만 있는데 청크에 제목이 안 들어감</td>
-          <td>청크에 <strong>문서 제목 포함</strong> + 본문에 <strong>고객 용어 병기</strong> + 두 표현을 질문셋에 함께 등록</td></tr>
+          <td>임베딩이 한글 음차와 법령 용어를 다른 말로 봄. 영문 원어로 물으면 회수됨</td>
+          <td><span class="tag ok">개선 완료</span> 문서에 <strong>표기를 병기</strong>(배당가산·그로스업·Gross-up)</td></tr>
       <tr><td>설정이 실제로 작동하지 않음<br><span style="color:var(--muted)">§09</span></td>
           <td>순서를 설정으로 뽑았으나 <strong>비교 대상의 순서를 지정하지 않음</strong></td>
-          <td>비교할 양쪽의 order를 <strong>모두 명시</strong>. 변수가 결과를 바꾸는지 먼저 확인 후 실험 설계</td></tr>
+          <td><span class="tag ok">개선 완료</span> 비교할 양쪽의 order를 <strong>모두 명시</strong></td></tr>
       <tr><td>인제스트가 누적됨</td>
           <td>재호출 시 기존 청크를 지우지 않아 벡터 스토어에 계속 쌓임</td>
-          <td>인제스트 전 기존 문서를 삭제하거나, <strong>문서 ID 기준으로 덮어쓰게</strong> 변경</td></tr>
+          <td><span class="tag mid">미개선</span> 인제스트 전 기존 문서를 삭제하거나, <strong>문서 ID 기준으로 덮어쓰게</strong> 변경</td></tr>
     </tbody>
-    <caption>표 11. 열 개 중 셋은 이번에 수정했고, 나머지는 개선 방향까지 확인한 상태입니다.</caption>
+    <caption>표 11. 열 건 중 여덟 건은 이번에 수정하고 재실행으로 확인했으며, 두 건은 개선 방향만 정리했습니다.</caption>
   </table></div>
 
   <p>
@@ -1025,6 +1124,7 @@ MessageChatMemoryAdvisor.builder(chatMemory).order(<span class="n">200</span>).b
     <strong>같은 원칙을 아직 적용하지 못한 곳이 어디인지도 함께 드러났습니다.</strong>
     가설을 세운 도구 경로에는 답변 금액과 도구 반환값을 대조하는 축을 두었지만,
     가설을 세우지 않은 규정 경로에는 그런 축이 없었습니다.
+    실습 후반에 같은 성격의 검사(출처가 회수 결과 안에 있는지)를 규정 경로에도 넣었습니다.
     그 결과 회수되지 않은 조문을 출처로 붙이고 세율까지 틀린 응답이 나왔고,
     <em>출처가 붙어 있어 형식상으로는 정상 답변과 구분되지 않았습니다.</em>
     출처를 표기하게 하는 것만으로는 부족하고, 그 출처가 문장을 실제로 뒷받침하는지 확인하는 절차가 필요합니다.
@@ -1049,14 +1149,15 @@ MessageChatMemoryAdvisor.builder(chatMemory).order(<span class="n">200</span>).b
 
   <h3>한계</h3>
   <ul class="b">
-    <li><strong>규정 경로에 사실 검증 축이 없습니다.</strong> 세율·금액을 문서에서 파싱해
-        답변과 대조하는 절차가 필요하지만 이번 범위에서는 만들지 못했습니다.</li>
+    <li><strong>값 자체를 검증하지는 못합니다.</strong> 출처가 회수 결과 안에 있는지는 검사하지만,
+        그 근거 안의 숫자를 잘못 읽은 경우는 잡히지 않습니다. 세율처럼 기계적으로 뽑을 수 있는 값을
+        골든셋에 넣고 답변과 대조하는 단계가 남아 있습니다.</li>
     <li><strong>모델 응답의 재현성이 보장되지 않습니다.</strong> 같은 근거·같은 온도에서도
         거절과 단언이 갈렸습니다. 단일 실행 점검으로는 이런 결함을 잡을 수 없습니다.</li>
     <li><strong>거절과 분류가 정규식 열거에 의존합니다.</strong> 표현이 조금만 달라지면
         빠져나가고, 열거를 늘리는 방식으로는 끝이 없습니다.</li>
-    <li><strong>검색 실패가 질문 표현에 좌우됩니다.</strong> 고객이 쓰는 용어와 법령 용어가
-        다를 때 회수되지 않으며, 적중률을 단일 숫자로 보고하면 이 취약성이 가려집니다.</li>
+    <li><strong>검색 실패가 질문 표기에 좌우됩니다.</strong> 같은 개념이라도 한글 음차로 물으면
+        회수되지 않고 영문 원어로 물으면 회수됐습니다. 적중률을 단일 숫자로 보고하면 이 취약성이 가려집니다.</li>
     <li><strong>세율·공제는 2026년 귀속 실습용 단순화입니다.</strong> 인적공제 상세와
         소득 종류별 예외는 다루지 않았습니다.</li>
     <li><strong>자사 계좌와 마이데이터 연동 기관 외의 금융소득은 고객 진술에 의존합니다.</strong>
