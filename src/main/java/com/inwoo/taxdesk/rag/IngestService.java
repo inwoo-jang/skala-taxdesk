@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -29,11 +30,23 @@ import org.springframework.util.StreamUtils;
  *   &gt; 출처: 소득세법 §14 · §62
  *   &gt; 귀속연도: 2026
  *   &gt; 문서 성격: LAW
+ *   &gt; 법령버전: 소득세법 법률 제21221호 (시행 2026-07-01)   ← 선택. 없으면 빈 값
+ *   &gt; 원문: 국가법령정보센터(law.go.kr) · docs/raw_law/소득세법.txt
+ *   &gt; 확인일: 2026-08-20
  *
  *   ## 헤딩            ← 청크 경계
  *   소득세법 §14③11호   ← 헤딩 바로 아래 조문 재기입. 청크 하나만 봐도 출처가 완성된다
  *   본문...
  * </pre>
+ *
+ * <p>두 가지를 더 지킨다.
+ * <ul>
+ *   <li><b>청크 ID 는 결정적이다</b> (파일명 + 헤딩 + 순번). 같은 문서를 다시 색인하면
+ *       같은 ID 를 먼저 지우고 넣으므로 두 번 눌러도 청크가 두 배가 되지 않는다.
+ *       예전에는 색인할 때마다 중복이 쌓였고, 중복 청크가 top-k 자리를 차지했다</li>
+ *   <li><b>청크 본문 앞에 문서 제목을 넣는다.</b> 제목에만 있는 낱말(예: "그로스업")이 본문에 없으면
+ *       고객 용어로 물었을 때 회수되지 않았다 (RESULTS RG-05)</li>
+ * </ul>
  *
  * <p>검증 기준: 인제스트 후 <b>조문 메타 누락 0건</b>. 하나라도 비면 그 청크는 출처 없이
  * 인용될 수 있고, 그건 검증표상 실패다.
@@ -47,6 +60,9 @@ public class IngestService {
     private static final Pattern FRONT_SOURCE = Pattern.compile("^>\\s*출처:\\s*(.+)$", Pattern.MULTILINE);
     private static final Pattern FRONT_YEAR = Pattern.compile("^>\\s*귀속연도:\\s*(\\d{4})", Pattern.MULTILINE);
     private static final Pattern FRONT_KIND = Pattern.compile("^>\\s*문서 성격:\\s*(\\w+)", Pattern.MULTILINE);
+    private static final Pattern FRONT_VERSION = Pattern.compile("^>\\s*법령버전:\\s*(.+)$", Pattern.MULTILINE);
+    private static final Pattern FRONT_URL = Pattern.compile("^>\\s*원문:\\s*(.+)$", Pattern.MULTILINE);
+    private static final Pattern FRONT_VERIFIED = Pattern.compile("^>\\s*확인일:\\s*(.+)$", Pattern.MULTILINE);
     private static final Pattern TITLE = Pattern.compile("^#\\s+(.+)$", Pattern.MULTILINE);
     /** 헤딩 바로 아래 줄에 다시 적은 조문. 이게 있으면 청크 단독으로 출처가 완성된다. */
     private static final Pattern ARTICLE_LINE =
@@ -74,8 +90,13 @@ public class IngestService {
             String title = first(TITLE, text, name);
             String fallbackArticle = first(FRONT_SOURCE, text, "");
             int year = Integer.parseInt(first(FRONT_YEAR, text, "0"));
-            String kind = first(FRONT_KIND, text, "LAW");
+            String kind = first(FRONT_KIND, text, DocumentMeta.KIND_LAW);
+            // 자체 안내는 법령 버전이 없다. 헤더의 "(자체 안내 — 법령 아님)" 같은 설명 문구를 버전으로 싣지 않는다.
+            String version = DocumentMeta.KIND_LAW.equals(kind) ? first(FRONT_VERSION, text, "") : "";
+            String url = first(FRONT_URL, text, "");
+            String verified = first(FRONT_VERIFIED, text, "");
 
+            int index = 0;
             for (Chunk c : split(text)) {
                 if (c.body().length() < MIN_CHARS) {
                     continue;
@@ -85,18 +106,33 @@ public class IngestService {
                 if (article.isBlank()) {
                     missingArticle.add(name + " / " + c.heading());
                 }
-                DocumentMeta meta = new DocumentMeta(name, title, article, year, kind);
-                docs.add(new Document(c.heading() + "\n" + c.body(), meta.toMap()));
+                DocumentMeta meta = new DocumentMeta(name, title, article, year, kind, version, url, verified);
+                String body = c.heading().isBlank()
+                        ? title + "\n" + c.body()
+                        : title + " — " + c.heading() + "\n" + c.body();
+                docs.add(new Document(chunkId(name, c.heading(), index++), body, meta.toMap()));
             }
         }
 
         if (!docs.isEmpty()) {
+            // 같은 ID 를 먼저 지운다. 지울 것이 없어도 예외가 나지 않는다 (SimpleVectorStore 는 map.remove).
+            try {
+                vectorStore.delete(docs.stream().map(Document::getId).toList());
+            } catch (RuntimeException e) {
+                log.warn("기존 청크 삭제 실패 — 중복이 남을 수 있다: {}", e.toString());
+            }
             vectorStore.add(docs);
         }
         IngestResult result = new IngestResult(files, docs.size(), missingArticle.size(), missingArticle);
         log.info("인제스트 완료 — 파일 {} · 청크 {} · 조문 메타 누락 {}",
                 result.files(), result.chunks(), result.missingArticleCount());
         return result;
+    }
+
+    /** 결정적 ID. 같은 문서·같은 헤딩·같은 순번이면 항상 같은 값이다. */
+    static String chunkId(String doc, String heading, int index) {
+        return UUID.nameUUIDFromBytes((doc + "#" + heading + "#" + index).getBytes(StandardCharsets.UTF_8))
+                .toString();
     }
 
     /** 헤딩(조문) 경계로 자른다. 헤딩이 없는 문서는 통째로 한 청크다. */

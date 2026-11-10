@@ -89,7 +89,9 @@ public class TaxCalcTools {
         steps.add("종합과세기준금액 %s원 (소득세법 §14③6호)".formatted(won(threshold)));
         steps.add(comprehensive
                 ? "기준 초과 %s원 → 종합과세 대상".formatted(won(excess))
-                : "기준 이하 → 분리과세로 종결. 원천징수 %s%%로 과세가 끝나며 종합소득세 신고 대상이 아님"
+                : ("기준 이하 → 금융소득은 분리과세로 종결. 원천징수 %s%%로 과세가 끝나며 "
+                        + "금융소득만으로는 종합소득세 신고 대상이 아님 "
+                        + "(근로·사업 등 다른 종합소득이 있으면 그 소득의 신고 의무는 별도)")
                         .formatted(rateText(props.separateTaxRate())));
 
         return new TaxClassification(comprehensive ? Taxation.COMPREHENSIVE : Taxation.SEPARATE,

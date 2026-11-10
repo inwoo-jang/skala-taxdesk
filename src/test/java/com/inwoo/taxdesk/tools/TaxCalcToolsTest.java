@@ -256,7 +256,8 @@ class TaxCalcToolsTest {
                 new TaxDeskProperties.Bracket(500_000_000L, 0.40, 25_940_000L),
                 new TaxDeskProperties.Bracket(1_000_000_000L, 0.42, 35_940_000L),
                 new TaxDeskProperties.Bracket(0L, 0.45, 65_940_000L));
-        return new TaxDeskProperties(20_000_000L, grossUpRate, 0.14, 0.10, brackets,
+        return new TaxDeskProperties(2026, "소득세법 법률 제21221호 (시행 2026-07-01)", "2026-08-20",
+                20_000_000L, grossUpRate, 0.14, 0.10, brackets,
                 Map.of(), Map.of(), 2000, 20, 4, 0.25, 0.30, 100,
                 "gpt-4o-mini", "gpt-4o-mini", "classpath:/tax-docs/");
     }

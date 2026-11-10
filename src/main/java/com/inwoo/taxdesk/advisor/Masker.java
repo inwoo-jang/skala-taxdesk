@@ -20,8 +20,12 @@ public final class Masker {
     /** 주민등록번호 — 뒷자리 전체를 가린다. 성별 자리 하나만 남겨도 식별력이 크다. */
     private static final Pattern RRN = Pattern.compile("\\b(\\d{6})[-\\s]?([1-4]\\d{6})\\b");
 
-    /** 계좌번호 — 하이픈 포함 10~20자리. 앞 3자리와 뒤 2자리만 남긴다. */
-    private static final Pattern ACCOUNT = Pattern.compile("\\b(\\d{2,4})-?(\\d{2,6})-?(\\d{2,8})\\b");
+    /**
+     * 계좌번호 — 하이픈 포함 10~20자리. 앞 3자리와 뒤 2자리만 남긴다.
+     * 앞뒤가 이미 가린 자리({@code -*})에 붙은 숫자는 건너뛴다 — 주민번호 앞자리
+     * {@code 900101-*******} 를 계좌번호로 다시 쪼개 {@code 90-****-01-*******} 로 만들던 문제.
+     */
+    private static final Pattern ACCOUNT = Pattern.compile("(?<![\\d*-])\\b(\\d{2,4})-?(\\d{2,6})-?(\\d{2,8})\\b(?!-?\\*)");
 
     /** 카드번호 16자리. */
     private static final Pattern CARD = Pattern.compile("\\b(\\d{4})[-\\s]?\\d{4}[-\\s]?\\d{4}[-\\s]?(\\d{4})\\b");

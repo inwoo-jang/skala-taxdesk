@@ -36,64 +36,64 @@ import org.springframework.context.annotation.Configuration;
 public class DataSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
-    private static final int YEAR = 2026;
-
+    /** 시드는 합성 데이터다. 실제 계좌·실제 고객이 아니며, 마이데이터 연동도 모사한 것이다. */
     @Bean
-    ApplicationRunner seedAccountIncome(AccountIncomeRepository repository) {
+    ApplicationRunner seedAccountIncome(AccountIncomeRepository repository, TaxDeskProperties props) {
         return args -> {
+            final int YEAR = props.taxYear();
             if (repository.count() > 0) {
                 return;
             }
             List<AccountIncome> rows = new ArrayList<>();
 
             // antman — 분리과세 종결 (합계 15,259,710)
-            rows.add(linked("antman", "국민은행", "정기예금 이자", 8_347_210L, 1_168_600L));
-            rows.add(own("antman", "국내주식 배당", IncomeType.DOMESTIC_DIVIDEND, 6_912_500L, 967_750L));
+            rows.add(linked(YEAR, "antman", "국민은행", "정기예금 이자", 8_347_210L, 1_168_600L));
+            rows.add(own(YEAR, "antman", "국내주식 배당", IncomeType.DOMESTIC_DIVIDEND, 6_912_500L, 967_750L));
 
             // isabu — 종합과세 (과세대상 21,528,440) + ISA 9,120,000 은 판정에서 제외
-            rows.add(linked("isabu", "하나은행", "적금 이자", 9_128_440L, 1_277_980L));
-            rows.add(own("isabu", "국내주식 배당", IncomeType.DOMESTIC_DIVIDEND, 12_400_000L, 1_736_000L));
-            rows.add(isa("isabu", "ISA 비과세 한도분", 4_000_000L, 0L, TaxTreatment.TAX_FREE));
-            rows.add(isa("isabu", "ISA 한도 초과분(9% 분리과세)", 5_120_000L, 460_800L, TaxTreatment.SEPARATE));
+            rows.add(linked(YEAR, "isabu", "하나은행", "적금 이자", 9_128_440L, 1_277_980L));
+            rows.add(own(YEAR, "isabu", "국내주식 배당", IncomeType.DOMESTIC_DIVIDEND, 12_400_000L, 1_736_000L));
+            rows.add(isa(YEAR, "isabu", "ISA 비과세 한도분", 4_000_000L, 0L, TaxTreatment.TAX_FREE));
+            rows.add(isa(YEAR, "isabu", "ISA 한도 초과분(9% 분리과세)", 5_120_000L, 460_800L, TaxTreatment.SEPARATE));
 
             // jonber — 비교과세 ①<② (합계 25,427,830 · 다른 종합소득 0)
-            rows.add(linked("jonber", "우리은행", "수시입출금 이자", 1_247_830L, 174_690L));
-            rows.add(own("jonber", "고배당주 배당", IncomeType.DOMESTIC_DIVIDEND, 24_180_000L, 3_385_200L));
+            rows.add(linked(YEAR, "jonber", "우리은행", "수시입출금 이자", 1_247_830L, 174_690L));
+            rows.add(own(YEAR, "jonber", "고배당주 배당", IncomeType.DOMESTIC_DIVIDEND, 24_180_000L, 3_385_200L));
 
             // richman — ①>② · Gross-up 전액 대상 (합계 102,504,600)
-            rows.add(linked("richman", "신한은행", "정기예금 이자", 21_384_600L, 2_993_840L));
-            rows.add(own("richman", "국내주식 배당", IncomeType.DOMESTIC_DIVIDEND, 61_250_000L, 8_575_000L));
-            rows.add(own("richman", "해외ETF 분배금", IncomeType.FOREIGN_DIVIDEND, 19_870_000L, 2_781_800L));
+            rows.add(linked(YEAR, "richman", "신한은행", "정기예금 이자", 21_384_600L, 2_993_840L));
+            rows.add(own(YEAR, "richman", "국내주식 배당", IncomeType.DOMESTIC_DIVIDEND, 61_250_000L, 8_575_000L));
+            rows.add(own(YEAR, "richman", "해외ETF 분배금", IncomeType.FOREIGN_DIVIDEND, 19_870_000L, 2_781_800L));
 
             // americano — Gross-up 대상 0 (합계 30,356,350)
-            rows.add(linked("americano", "카카오뱅크", "세이프박스 이자", 2_916_350L, 408_280L));
-            rows.add(own("americano", "미국주식 배당", IncomeType.FOREIGN_DIVIDEND, 27_440_000L, 3_841_600L));
+            rows.add(linked(YEAR, "americano", "카카오뱅크", "세이프박스 이자", 2_916_350L, 408_280L));
+            rows.add(own(YEAR, "americano", "미국주식 배당", IncomeType.FOREIGN_DIVIDEND, 27_440_000L, 3_841_600L));
 
             repository.saveAll(rows);
-            log.info("시드 완료 — 계좌 내역 {}건 / {} 귀속", rows.size(), YEAR);
+            log.info("시드 완료(합성 데이터) — 계좌 내역 {}건 / {} 귀속", rows.size(), YEAR);
         };
     }
 
     /** 자사 계좌. 우리가 직접 지급하고 원천징수한 것이라 가장 확실하다. */
-    private static AccountIncome own(String owner, String product, IncomeType type,
+    private static AccountIncome own(int year, String owner, String product, IncomeType type,
                                      long amount, long withheld) {
-        return new AccountIncome(id(), owner, "1234" + owner.hashCode() % 10000 + "01", YEAR,
+        return new AccountIncome(id(), owner, "1234" + owner.hashCode() % 10000 + "01", year,
                 "SKALA증권", IncomeSource.OWN_ACCOUNT, product, type, amount, withheld,
                 TaxTreatment.TAXABLE);
     }
 
     /** 마이데이터 연동 기관. 확인된 금액이지만 "연동한 기관에 한한다"는 단서가 붙는다. */
-    private static AccountIncome linked(String owner, String bank, String product,
+    private static AccountIncome linked(int year, String owner, String bank, String product,
                                         long amount, long withheld) {
-        return new AccountIncome(id(), owner, "110" + Math.abs(bank.hashCode() % 1000000), YEAR,
+        return new AccountIncome(id(), owner, "110" + Math.abs(bank.hashCode() % 1000000), year,
                 bank, IncomeSource.LINKED, product, IncomeType.INTEREST, amount, withheld,
                 TaxTreatment.TAXABLE);
     }
 
     /** ISA. 비과세 한도분과 초과분(9% 분리과세)은 과세방식이 다르므로 별개 행이다. */
-    private static AccountIncome isa(String owner, String product, long amount, long withheld,
+    private static AccountIncome isa(int year, String owner, String product, long amount, long withheld,
                                      TaxTreatment treatment) {
-        return new AccountIncome(id(), owner, "9988" + owner.hashCode() % 1000 + "77", YEAR,
+        return new AccountIncome(id(), owner, "9988" + owner.hashCode() % 1000 + "77", year,
                 "SKALA증권", IncomeSource.OWN_ACCOUNT, product, IncomeType.INTEREST,
                 amount, withheld, treatment);
     }

@@ -61,4 +61,29 @@ class AmountParserTest {
         assertThat(AmountParser.bareAmount("1억 5200만원이요")).isEqualTo(152_000_000L);
         assertThat(AmountParser.bareAmount("금융소득이 2천만원 넘으면 어떻게 되나요?")).isNull();
     }
+
+    @Test
+    @DisplayName("타사 소득 '없어요' 는 0, 말한 적 없으면 null")
+    void externalZeroVsUnknown() {
+        assertThat(AmountParser.externalAmount("타사 소득은 없어요")).isZero();
+        assertThat(AmountParser.externalAmount("다른 은행 이자는 없습니다")).isZero();
+        assertThat(AmountParser.externalAmount("저 종합과세 대상인가요?")).isNull();
+        assertThat(AmountParser.externalAmount("타사 계좌도 조회해줘")).isNull();
+    }
+
+    @Test
+    @DisplayName("매출·수입금액은 사업소득금액이 아니므로 되물어야 한다")
+    void detectsSalesRevenue() {
+        assertThat(AmountParser.mentionsSalesRevenue("작년 매출이 3억인데요")).isTrue();
+        assertThat(AmountParser.mentionsSalesRevenue("사업소득금액 1억이에요")).isFalse();
+        assertThat(AmountParser.mentionsGrossPay("연봉 8천인데 세금 얼마예요?")).isTrue();
+    }
+
+    @Test
+    @DisplayName("소득 종류를 읽는다")
+    void readsIncomeKind() {
+        assertThat(AmountParser.otherIncomeKind("근로소득금액 5,000만원")).isEqualTo("근로");
+        assertThat(AmountParser.otherIncomeKind("사업소득 1억")).isEqualTo("사업");
+        assertThat(AmountParser.otherIncomeKind("다른 소득 3천만원")).isNull();
+    }
 }

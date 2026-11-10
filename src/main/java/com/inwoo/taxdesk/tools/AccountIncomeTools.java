@@ -2,10 +2,15 @@ package com.inwoo.taxdesk.tools;
 
 import com.inwoo.taxdesk.advisor.Masker;
 import com.inwoo.taxdesk.domain.AccountIncome;
+import com.inwoo.taxdesk.domain.IncomeSource;
 import com.inwoo.taxdesk.domain.IncomeType;
 import com.inwoo.taxdesk.domain.TaxTreatment;
 import com.inwoo.taxdesk.repository.AccountIncomeRepository;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -23,6 +28,10 @@ import org.springframework.stereotype.Component;
  *
  * <p>비과세·분리과세 상품은 <b>합계에서 빼되 목록에는 남긴다.</b> 빼고 안 보여 주면
  * 고객이 "내 ISA 는 왜 빠졌냐"고 묻게 되고, 그 답을 모델이 지어내게 된다.
+ *
+ * <p><b>원천징수 합계도 과세대상 행만 더한다.</b> ISA 초과분의 9% 분리과세 세액은 그 소득과 함께
+ * 과세가 끝난 돈이라 종합소득 결정세액에서 빼는 기납부세액이 아니다. 예전 구현은 전 행을 더해
+ * 기납부세액을 부풀렸다 — 그만큼 "추가 납부할 세액"이 작게 나온다.
  */
 @Component
 public class AccountIncomeTools {
@@ -47,7 +56,12 @@ public class AccountIncomeTools {
         long interest = sum(rows, IncomeType.INTEREST, true);
         long domestic = sum(rows, IncomeType.DOMESTIC_DIVIDEND, true);
         long foreign = sum(rows, IncomeType.FOREIGN_DIVIDEND, true);
-        long withheld = rows.stream().mapToLong(AccountIncome::getWithheldTax).sum();
+        long withheld = rows.stream()
+                .filter(AccountIncome::countsTowardThreshold)
+                .mapToLong(AccountIncome::getWithheldTax).sum();
+        long excludedWithheld = rows.stream()
+                .filter(r -> !r.countsTowardThreshold())
+                .mapToLong(AccountIncome::getWithheldTax).sum();
         long excluded = rows.stream()
                 .filter(r -> !r.countsTowardThreshold())
                 .mapToLong(AccountIncome::getAmount).sum();
@@ -65,7 +79,63 @@ public class AccountIncomeTools {
                 .toList();
 
         return new IncomeSummary(year, interest, domestic, foreign,
-                interest + domestic + foreign, excluded, withheld, items);
+                interest + domestic + foreign, excluded, withheld, excludedWithheld, items);
+    }
+
+    /**
+     * "내 금융소득을 한눈에" — 기관·출처·유형·과세구분별로 나눈 현황.
+     *
+     * <p>{@link #lookupMyIncome} 이 판정용 합계라면 이것은 <b>확인 범위를 보여주는</b> 화면용이다.
+     * 어느 기관의 자료가 들어와 있고, 어느 유형이 얼마이며, 무엇이 판정에서 빠졌는지를 분리한다.
+     * 여기 없는 기관은 "0원"이 아니라 <b>"자료 없음"</b>이다 — 연동하지 않았거나 지급이 없었거나
+     * 둘 중 무엇인지 이 데이터로는 알 수 없고, 그래서 그렇게 적는다.
+     *
+     * @param externalDeclared 고객이 대화에서 말한 타사 금액. {@code null} 이면 미확인
+     */
+    public IncomeOverview overview(int year, ToolContext context, Long externalDeclared) {
+        String ownerId = ToolUser.of(context);
+        List<AccountIncome> rows = repository.findByOwnerIdAndYear(ownerId, year);
+
+        Map<String, InstitutionLine> byInstitution = new LinkedHashMap<>();
+        for (AccountIncome r : rows) {
+            String key = r.getInstitution() + "|" + r.getSource();
+            InstitutionLine line = byInstitution.getOrDefault(key,
+                    new InstitutionLine(r.getInstitution(), r.getSource().name(), "CONFIRMED", 0, 0L, 0L));
+            byInstitution.put(key, new InstitutionLine(line.institution(), line.source(), line.status(),
+                    line.rows() + 1, line.amount() + r.getAmount(), line.withheldTax() + r.getWithheldTax()));
+        }
+
+        Map<String, Long> byType = new LinkedHashMap<>();
+        for (IncomeType t : IncomeType.values()) {
+            byType.put(t.name(), sum(rows, t, true));
+        }
+        Map<String, Long> byTreatment = new LinkedHashMap<>();
+        for (TaxTreatment t : TaxTreatment.values()) {
+            byTreatment.put(t.name(), rows.stream()
+                    .filter(r -> r.getTreatment() == t)
+                    .mapToLong(AccountIncome::getAmount).sum());
+        }
+
+        String externalStatus = externalDeclared == null ? "UNKNOWN"
+                : externalDeclared == 0 ? "DECLARED_ZERO" : "DECLARED";
+
+        List<String> notes = new ArrayList<>();
+        notes.add("자사(OWN_ACCOUNT)와 마이데이터 연동(LINKED) 기관의 자료만 포함됩니다. "
+                + "연동되지 않은 기관은 여기 나타나지 않으며, 그 기관의 소득이 0원이라는 뜻이 아닙니다.");
+        notes.add("금액은 조회 시점까지 확인된 지급분입니다. 연말까지 추가 지급이 있으면 달라집니다.");
+        if (externalDeclared == null) {
+            notes.add("타사(미연동) 금융소득은 아직 확인되지 않았습니다. 없으면 \"타사 소득 없어요\"라고 알려 주세요.");
+        } else {
+            notes.add("타사 금융소득 %,d원은 고객님이 알려주신 값이며 저희가 확인한 값이 아닙니다."
+                    .formatted(externalDeclared));
+        }
+
+        return new IncomeOverview(year, LocalDate.now(),
+                List.copyOf(byInstitution.values()), byType, byTreatment,
+                externalDeclared, externalStatus,
+                rows.stream().filter(r -> r.getSource() == IncomeSource.LINKED)
+                        .map(AccountIncome::getInstitution).distinct().toList(),
+                notes);
     }
 
     private static long sum(List<AccountIncome> rows, IncomeType type, boolean taxableOnly) {
@@ -77,8 +147,10 @@ public class AccountIncomeTools {
     }
 
     /**
-     * @param taxableTotal 종합과세 판정에 들어가는 합계. 비과세·분리과세는 빠져 있다
-     * @param excludedTotal 판정에서 빠진 금액 (비과세 + 분리과세). 빠졌다는 사실을 숨기지 않는다
+     * @param taxableTotal         종합과세 판정에 들어가는 합계. 비과세·분리과세는 빠져 있다
+     * @param excludedTotal        판정에서 빠진 금액 (비과세 + 분리과세). 빠졌다는 사실을 숨기지 않는다
+     * @param withheldTax          과세대상 행의 원천징수 합계 — 기납부세액으로 차감되는 값
+     * @param excludedWithheldTax  비과세·분리과세 행의 원천징수 합계. 참고 표시용이며 기납부세액이 아니다
      */
     public record IncomeSummary(int year,
                                 long interest,
@@ -87,6 +159,7 @@ public class AccountIncomeTools {
                                 long taxableTotal,
                                 long excludedTotal,
                                 long withheldTax,
+                                long excludedWithheldTax,
                                 List<Item> items) {
     }
 
@@ -98,5 +171,28 @@ public class AccountIncomeTools {
                        String source,
                        long amount,
                        long withheldTax) {
+    }
+
+    /** 기관 한 줄. {@code status} 는 지금은 CONFIRMED 뿐이다 — 조회 실패는 예외로 올라와 서비스가 보류한다. */
+    public record InstitutionLine(String institution, String source, String status,
+                                  int rows, long amount, long withheldTax) {
+    }
+
+    /**
+     * @param byType          과세대상 금액을 유형별로 (INTEREST / DOMESTIC_DIVIDEND / FOREIGN_DIVIDEND)
+     * @param byTreatment     전 행을 과세구분별로 (TAXABLE / TAX_FREE / SEPARATE)
+     * @param externalDeclared 고객이 말한 타사 금액. {@code null} = 미확인
+     * @param externalStatus  UNKNOWN · DECLARED_ZERO · DECLARED
+     * @param linkedInstitutions 연동으로 자료가 들어온 기관명 — 수기 입력과의 중복 확인에 쓴다
+     */
+    public record IncomeOverview(int year,
+                                 LocalDate asOf,
+                                 List<InstitutionLine> institutions,
+                                 Map<String, Long> byType,
+                                 Map<String, Long> byTreatment,
+                                 Long externalDeclared,
+                                 String externalStatus,
+                                 List<String> linkedInstitutions,
+                                 List<String> notes) {
     }
 }

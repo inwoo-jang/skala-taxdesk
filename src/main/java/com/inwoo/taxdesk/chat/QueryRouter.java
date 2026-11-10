@@ -60,7 +60,8 @@ public class QueryRouter {
 
     private static final List<Rule> RULES = List.of(
             new Rule(Refusal.INVESTMENT_ADVICE, Pattern.compile(
-                    "(오를|내릴|떨어질|상승|하락|전망|추천|사도\\s*되|살까|팔까|매수|매도|수익률\\s*좋)")),
+                    "(오를|내릴|떨어질|상승|하락|전망|추천|사도\\s*되|살까|팔까|팔면|팔아야|사야|매수|매도|"
+                            + "손해|손실|수익률\\s*좋|어떤\\s*종목)")),
             new Rule(Refusal.CLASSIFIED_INCOME, Pattern.compile(
                     "(양도\\s*소?득?세?|주식.{0,5}팔|퇴직\\s*금?소?득?세?|퇴직금)")),
             new Rule(Refusal.NO_ACCESS, Pattern.compile(
@@ -83,7 +84,15 @@ public class QueryRouter {
             "(가입|신청|줄일\\s*방법|절세|혜택.{0,6}상품)");
     // 사이에 상품명이 끼어도 "내 것"이다 — "제 ISA 도 금융소득에" 처럼.
     private static final Pattern MINE = Pattern.compile(
-            "(제|내|저의|나의|본인)\\s*\\S{0,8}\\s*(계좌|이자|배당|금융소득|세금)|저\\s*(종합과세|대상)");
+            // 사이에 낱말이 셋까지 끼어도 "내 것"이다 — "제 ISA 수익도 금융소득에" (RESULTS CA-10).
+            "(제|내|저의|나의|본인)\\s*(?:\\S{1,8}\\s*){0,3}(계좌|이자|배당|금융소득|세금|ISA)"
+                    + "|저\\s*(종합과세|대상)"
+                    // 대명사만 있는 되물음 — "그럼 저는요?" (RESULTS MT-01)
+                    + "|(그럼|그러면|그렇다면)\\s*(저|나|제\\s*경우)는?\\s*요?");
+
+    /** "며칠 남았나요" 류 — 오늘 날짜가 필요한 질문. estimateDueDate 도구가 답해야 한다. */
+    private static final Pattern DUE_DATE_CALC = Pattern.compile(
+            "(기한|마감).{0,12}(며칠|얼마나)\\s*남|(며칠|얼마나)\\s*남.{0,6}(기한|마감)");
 
     private final ChatClient router;
 
@@ -96,7 +105,14 @@ public class QueryRouter {
             return Decision.of(Route.REGULATION);
         }
         // 1단계 — 규칙. 거절은 모델 없이 끝낸다.
+        // 단, "타사 배당 1,000만원 더하면요?" 처럼 고객이 금액을 알려준 문장은 거절하지 않는다.
+        // 거절 문구가 "금액을 알려주시면 합산해 드립니다"라고 안내해 놓고 금액을 주면 또 거절하는 것은
+        // 대안이 말뿐이라는 뜻이다 (RESULTS MT-02). 금액이 있으면 계산 경로로 보낸다.
+        boolean declaresExternal = AmountParser.externalAmount(question) != null;
         for (Rule r : RULES) {
+            if (r.refusal() == Refusal.NO_ACCESS && declaresExternal) {
+                continue;
+            }
             if (r.pattern().matcher(question).find()) {
                 log.debug("규칙 분류: {} ({})", Route.OUT_OF_SCOPE, r.refusal());
                 return new Decision(Route.OUT_OF_SCOPE, r.refusal(), "규칙 매칭");
@@ -107,6 +123,10 @@ public class QueryRouter {
         }
         if (ACTION.matcher(question).find()) {
             return Decision.of(Route.ACTION);
+        }
+        // 날짜가 들어간 질문은 RAG 로는 원리상 맞출 수 없다 (RESULTS RT-12). 도구 경로로 보낸다.
+        if (DUE_DATE_CALC.matcher(question).find()) {
+            return Decision.of(Route.CALCULATION);
         }
         // 계산 입력값(다른 소득·공제·기납부세액)을 말한 턴은 다시 계산해야 한다.
         // 진술문은 질문처럼 안 생겨서 REGULATION 으로 새기 쉽다.

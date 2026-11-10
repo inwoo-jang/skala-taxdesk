@@ -57,7 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
                         // 승인 게이트가 프롬프트가 아니라 여기에 있다.
                         .requestMatchers("/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/chat/**", "/calc/**").hasRole("USER")
+                        .requestMatchers("/chat/**", "/calc/**", "/income/**").hasRole("USER")
                         .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())
                 .build();

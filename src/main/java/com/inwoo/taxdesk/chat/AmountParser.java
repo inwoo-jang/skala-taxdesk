@@ -12,6 +12,10 @@ import java.util.regex.Pattern;
  * <p><b>모델에게 파싱을 맡기지 않는 이유</b>는 이 값이 세액 계산의 입력이기 때문이다.
  * 모델이 "5천만"을 5,000,000 으로 잘못 읽으면 세액이 통째로 틀리는데,
  * 그 오류는 답변 문장만 봐서는 보이지 않는다. 규칙으로 읽고, 못 읽으면 되묻는 편이 안전하다.
+ *
+ * <p><b>모든 값에서 "미상(null)"과 "0 이라고 답함(0)"을 구분한다.</b> 타사 금융소득도 마찬가지다 —
+ * 고객이 타사 금액을 말한 적이 없는데 0 으로 놓고 "분리과세 종결"이라고 답하면,
+ * 자사 0원을 전체 0원으로 단정하는 셈이다.
  */
 public final class AmountParser {
 
@@ -30,10 +34,17 @@ public final class AmountParser {
             "(결정세액|기납부|이미\\s*낸\\s*세금?|연말정산.{0,6}세액)[^0-9]{0,8}" + AMOUNT);
 
     private static final Pattern EXTERNAL = Pattern.compile(
-            "(타사|다른\\s*(?:증권사|은행))[^0-9]{0,12}" + AMOUNT);
+            "(타사|다른\\s*(?:증권사|은행|금융))[^0-9]{0,12}" + AMOUNT);
+
+    /** "타사는 없어요" · "다른 은행 이자 없습니다" — 미상이 아니라 명시적 0 이다. */
+    private static final Pattern NO_EXTERNAL = Pattern.compile(
+            "(타사|다른\\s*(?:증권사|은행|금융|기관)|그\\s*외\\s*(?:금융)?소득)[^.!?]{0,14}(없|0원|영원)");
 
     /** 총급여는 근로소득금액이 아니다. 그대로 쓰면 세액이 과대 산출된다. */
-    private static final Pattern GROSS_PAY = Pattern.compile("총\\s*급여");
+    private static final Pattern GROSS_PAY = Pattern.compile("총\\s*급여|연봉");
+
+    /** 매출·수입금액은 사업소득금액이 아니다 (필요경비를 빼기 전 값). 그대로 쓰면 과대 산출된다. */
+    private static final Pattern SALES_REVENUE = Pattern.compile("매출(액)?|수입\\s*금액|총\\s*수입");
 
     private AmountParser() {
     }
@@ -53,6 +64,36 @@ public final class AmountParser {
             return 0L;   // 미상(null)이 아니라 "0 이라고 답했다"
         }
         return find(OTHER_INCOME, text);
+    }
+
+    /**
+     * 그 밖의 종합소득의 <b>종류</b>. 세법상 소득금액은 종류별로 다른 서식 칸에서 오므로
+     * 계산 전개에 "근로소득금액(고객 제공)"처럼 종류를 적어 두어야 고객이 어느 칸을 봤는지 확인할 수 있다.
+     *
+     * @return 근로 · 사업 · 연금 · 기타 중 하나. 문장에 종류가 없으면 {@code null}
+     */
+    public static String otherIncomeKind(String text) {
+        if (text == null) {
+            return null;
+        }
+        Matcher m = OTHER_INCOME.matcher(text);
+        if (!m.find()) {
+            return null;
+        }
+        String head = m.group(1);
+        if (head.startsWith("근로")) {
+            return "근로";
+        }
+        if (head.startsWith("사업")) {
+            return "사업";
+        }
+        if (head.startsWith("연금")) {
+            return "연금";
+        }
+        if (head.startsWith("기타")) {
+            return "기타";
+        }
+        return null;
     }
 
     /**
@@ -91,13 +132,24 @@ public final class AmountParser {
         return find(PREPAID, text);
     }
 
+    /**
+     * 타사(미연동 기관) 금융소득. "타사는 없어요"는 {@code 0}, 말한 적 없으면 {@code null}.
+     */
     public static Long externalAmount(String text) {
+        if (text != null && NO_EXTERNAL.matcher(text).find() && find(EXTERNAL, text) == null) {
+            return 0L;
+        }
         return find(EXTERNAL, text);
     }
 
     /** 고객이 "총급여"라고 말했는가. 그렇다면 되물어야 한다 (문서 08 참조). */
     public static boolean mentionsGrossPay(String text) {
         return text != null && GROSS_PAY.matcher(text).find();
+    }
+
+    /** 고객이 "매출"·"수입금액"이라고 말했는가. 사업소득금액이 아니므로 되물어야 한다. */
+    public static boolean mentionsSalesRevenue(String text) {
+        return text != null && SALES_REVENUE.matcher(text).find();
     }
 
     private static Long find(Pattern p, String text) {
