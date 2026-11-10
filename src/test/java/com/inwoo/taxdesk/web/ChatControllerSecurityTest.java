@@ -111,13 +111,25 @@ class ChatControllerSecurityTest {
     void overviewIsScoped() throws Exception {
         when(state.get(anyString())).thenReturn(ConversationState.Facts.empty());
         when(incomeTools.overview(eq(2026), any(), any())).thenReturn(
-                new AccountIncomeTools.IncomeOverview(2026, java.time.LocalDate.now(), List.of(),
-                        java.util.Map.of(), java.util.Map.of(), null, "UNKNOWN", List.of(), List.of()));
+                new AccountIncomeTools.IncomeOverview(2026, java.time.LocalDate.now(), "OK", 0L, 0L, List.of(),
+                        java.util.Map.of(), java.util.Map.of(), null, "UNKNOWN", List.of(), List.of(), List.of()));
 
         mvc.perform(get("/income/overview").with(httpBasic("antman", "pass1"))).andExpect(status().isOk());
         mvc.perform(get("/income/overview").with(httpBasic("admin", "admin"))).andExpect(status().isForbidden());
         mvc.perform(get("/income/overview")).andExpect(status().isUnauthorized());
 
         assertThat(props.taxYear()).isEqualTo(2026);
+    }
+
+    @Test
+    @DisplayName("/income/overview — 저장소 장애면 500 이 아니라 FAILED 상태로 답한다")
+    void overviewFailureIsAState() throws Exception {
+        when(incomeTools.overview(eq(2026), any(), any()))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("db down"));
+
+        mvc.perform(get("/income/overview").with(httpBasic("antman", "pass1")))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.lookupStatus").value("FAILED"));
     }
 }

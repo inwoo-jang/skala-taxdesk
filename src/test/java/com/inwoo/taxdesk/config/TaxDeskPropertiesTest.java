@@ -21,6 +21,16 @@ class TaxDeskPropertiesTest {
     }
 
     @Test
+    @DisplayName("실제 application.properties 를 Spring 방식으로 읽어도 규칙 버전의 한글이 깨지지 않는다")
+    void realPropertiesFileKeepsKorean() throws Exception {
+        var sources = new org.springframework.boot.env.PropertiesPropertySourceLoader()
+                .load("app", new org.springframework.core.io.ClassPathResource("application.properties"));
+        Object version = sources.get(0).getProperty("taxdesk.rule-version");
+
+        assertThat(String.valueOf(version)).startsWith("소득세법 법률 제21221호").contains("조세특례제한법");
+    }
+
+    @Test
     @DisplayName("버전·대조일이 비면 문제다")
     void missingVersion() {
         assertThat(TestProps.unversioned().problems())

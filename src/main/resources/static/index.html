@@ -19,9 +19,9 @@
   header .sub { font-size: 13px; color: var(--muted); }
   header .who { margin-left: auto; font-size: 13px; color: var(--muted); }
 
-  .layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; padding: 16px;
+  .layout { display: grid; grid-template-columns: 1fr 420px; gap: 16px; padding: 16px;
             max-width: 1400px; margin: 0 auto; align-items: start; }
-  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } #log { height: 55vh; min-height: 260px; } }
 
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
   .panel > h2 { font-size: 13px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line);
@@ -58,6 +58,37 @@
   .total { margin-top: 8px; font-weight: 700; font-size: 15px; }
   .kv { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 
+  /* 내 금융소득 패널 */
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  .ov { padding: 14px 16px; font-size: 13px; }
+  .ov .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap;
+              color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip.ok { background: #e8f3ec; color: #1d6b3a; }
+  .chip.nodata { background: var(--code); color: var(--muted); }
+  .chip.failed { background: #fdecec; color: #a12a2a; }
+  .chip.unknown { background: var(--warn-bg); color: var(--warn); }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+  @media (max-width: 480px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .tile { background: var(--code); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .tile .k { font-size: 11px; color: var(--muted); }
+  .tile .v { font-weight: 700; font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tile .v.na { color: var(--warn); font-weight: 600; }
+  .ov table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .ov th, .ov td { text-align: left; padding: 4px 2px; border-bottom: 1px solid var(--line); font-size: 12px; }
+  .ov th { color: var(--muted); font-weight: 600; }
+  .ov td.num, .ov th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ov details { margin-bottom: 10px; }
+  .ov summary { cursor: pointer; color: var(--accent); font-size: 12px; margin-bottom: 6px; }
+  .ov .notes { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12px; }
+  .ov .notes li { margin-bottom: 3px; }
+  .notice { font-size: 12px; background: var(--code); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+  .notice ul { margin: 0; padding-left: 16px; }
+  .preview { border: 1px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-top: 8px; background: #fff; }
+  .preview .actions { display: flex; gap: 6px; margin-top: 8px; }
+  .preview .actions button { padding: 6px 12px; font-size: 13px; }
+  .preview .actions button.ghost { background: #fff; color: var(--accent); border: 1px solid var(--line); }
+
   .examples { padding: 10px 16px 14px; border-top: 1px solid var(--line); }
   .examples h3 { font-size: 12px; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
   .examples button { background: #fff; color: var(--accent); border: 1px solid var(--line);
@@ -89,7 +120,7 @@
       <button data-q="금융소득이 2천만원을 넘으면 어떻게 되나요?">규정 (RAG)</button>
       <button data-q="이자 1200만원 배당 900만원이면 세금 얼마인가요?">계산 (Tool)</button>
       <button data-q="저 2026년에 종합과세 대상인가요?">판정 (RAG+Tool)</button>
-      <button data-q="세무사 상담 예약해 주세요">예약 (승인 게이트)</button>
+      <button data-q="비과세종합저축 가입하고 싶어요">절세상품 신청 (확인 후 접수)</button>
       <button data-q="양도소득세는 얼마나 나오나요?">범위 밖 (거절)</button>
       <button data-q="다른 증권사 계좌 배당도 조회해 주세요">권한 밖 (거절+대안)</button>
     </div>
@@ -100,12 +131,21 @@
     </form>
   </div>
 
+  <div class="side">
+
+  <div class="panel">
+    <h2>내 금융소득 — 확인된 범위와 빠진 부분</h2>
+    <div class="ov" id="ov"><p class="empty" style="color:var(--muted)">불러오는 중…</p></div>
+  </div>
+
   <div class="panel">
     <h2>이 답변의 근거 — 무엇을 보고 어떻게 계산했나</h2>
     <div class="meta" id="meta">
       <p class="empty">질문을 보내면 이 답변이 인용한 조문, 호출한 도구, 계산 전개 과정이 여기에 표시됩니다.<br><br>
       이 패널이 이 프로젝트의 주장입니다 — <b>근거와 계산을 둘 다 증명한다.</b></p>
     </div>
+  </div>
+
   </div>
 
 </div>
@@ -120,6 +160,9 @@ const meta = document.getElementById('meta');
 const form = document.getElementById('f');
 const input = document.getElementById('q');
 const send = document.getElementById('send');
+// 주소창에 계정을 넣고 들어온 경우(http://user:pass@host) 상대 경로 fetch 는 브라우저가 거부한다.
+// origin 에는 계정 정보가 없으므로 그 기준으로 만든다.
+const api = path => location.origin + path;
 const conversationId = 'web-' + Math.random().toString(36).slice(2, 10);
 
 document.querySelectorAll('.examples button').forEach(b => {
@@ -139,6 +182,76 @@ function bubble(who, text) {
 }
 
 const won = n => (n ?? 0).toLocaleString('ko-KR') + '원';
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------------------------------------------------------------- 내 금융소득
+// 원칙: 모르는 것을 0원으로 그리지 않는다. 조회 실패·자료 없음·타사 미확인은 금액 대신 상태로 보여준다.
+const ovEl = document.getElementById('ov');
+const TYPE = { INTEREST: '이자', DOMESTIC_DIVIDEND: '국내 배당', FOREIGN_DIVIDEND: '해외 배당' };
+const TREAT = { TAXABLE: '과세대상', TAX_FREE: '비과세', SEPARATE: '분리과세' };
+const SRC = { OWN_ACCOUNT: '자사', LINKED: '연동' };
+const LOOKUP = {
+  OK: ['ok', '조회 완료'],
+  NO_DATA: ['nodata', '자료 없음'],
+  FAILED: ['failed', '조회 실패'],
+};
+
+function externalTile(o) {
+  if (o.externalStatus === 'UNKNOWN') return '<div class="v na">미확인</div>';
+  if (o.externalStatus === 'DECLARED_ZERO') return '<div class="v">없음<span style="display:block;font-size:11px;color:var(--muted);font-weight:400">고객 답변</span></div>';
+  return `<div class="v">${won(o.externalDeclared)}<span style="display:block;font-size:11px;color:var(--muted);font-weight:400">고객 답변</span></div>`;
+}
+
+function renderOverview(o) {
+  const [cls, label] = LOOKUP[o.lookupStatus] ?? ['nodata', o.lookupStatus];
+  const parts = [];
+  parts.push(`<div class="head"><span>${esc(o.year)} 귀속 · 조회일 ${esc(o.asOf)}</span><span class="chip ${cls}">${label}</span></div>`);
+
+  const failed = o.lookupStatus === 'FAILED';
+  parts.push('<div class="tiles">' +
+    `<div class="tile"><div class="k">자사·연동 과세대상</div>${failed ? '<div class="v na">확인 불가</div>' : `<div class="v">${won(o.taxableTotal)}</div>`}</div>` +
+    `<div class="tile"><div class="k">판정 제외 (비과세·분리)</div>${failed ? '<div class="v na">확인 불가</div>' : `<div class="v">${won(o.excludedTotal)}</div>`}</div>` +
+    `<div class="tile"><div class="k">타사 (미연동)</div>${externalTile(o)}</div>` +
+    '</div>');
+
+  if (!failed && o.lookupStatus === 'OK') {
+    parts.push('<table><thead><tr><th>과세대상 유형</th><th class="num">금액</th></tr></thead><tbody>' +
+      Object.entries(o.byType ?? {}).map(([k, v]) => `<tr><td>${esc(TYPE[k] ?? k)}</td><td class="num">${won(v)}</td></tr>`).join('') +
+      '</tbody></table>');
+
+    parts.push('<table><thead><tr><th>기관</th><th>출처</th><th class="num">건수</th><th class="num">금액</th></tr></thead><tbody>' +
+      (o.institutions ?? []).map(i => `<tr><td>${esc(i.institution)}</td><td>${esc(SRC[i.source] ?? i.source)}</td>` +
+        `<td class="num">${esc(i.rows)}</td><td class="num">${won(i.amount)}</td></tr>`).join('') +
+      '</tbody></table>');
+
+    if (o.items?.length) {
+      parts.push('<details><summary>상품별 내역 ' + o.items.length + '건</summary><table><thead><tr><th>상품</th><th>구분</th><th class="num">금액</th></tr></thead><tbody>' +
+        o.items.map(i => `<tr><td>${esc(i.productName)}<br><span style="color:var(--muted)">${esc(i.institution)} · ${esc(i.accountNo)} · ${esc(TYPE[i.type] ?? i.type)}</span></td>` +
+          `<td>${esc(TREAT[i.treatment] ?? i.treatment)}</td><td class="num">${won(i.amount)}</td></tr>`).join('') +
+        '</tbody></table></details>');
+    }
+  }
+
+  if (o.linkedInstitutions?.length && o.externalStatus === 'DECLARED') {
+    parts.push(`<div class="disclaimer" style="margin:0 0 10px">연동 기관(${o.linkedInstitutions.map(esc).join(', ')})의 소득을 타사 금액에 다시 넣으셨다면 두 번 더해집니다. 상담창에서 타사 금액을 고쳐 말씀해 주세요.</div>`);
+  }
+
+  parts.push('<ul class="notes">' + (o.notes ?? []).map(n => `<li>${esc(n)}</li>`).join('') + '</ul>');
+  parts.push('<p style="margin:10px 0 0;font-size:12px;color:var(--muted)">2천만원 기준 판정은 타사 소득까지 확인한 뒤 상담창에서 안내합니다. 이 패널은 판정이 아니라 확인 범위입니다.</p>');
+  ovEl.innerHTML = parts.join('');
+}
+
+async function loadOverview() {
+  try {
+    const res = await fetch(api('/income/overview?')+'conversationId=' + encodeURIComponent(conversationId), { credentials: 'include' });
+    if (res.status === 401) { ovEl.innerHTML = '<p style="color:var(--muted)">로그인하면 내 금융소득 현황이 표시됩니다.</p>'; return; }
+    if (res.status === 403) { ovEl.innerHTML = '<p style="color:var(--muted)">고객 계정으로 로그인해야 볼 수 있습니다.</p>'; return; }
+    if (!res.ok) { ovEl.innerHTML = '<p style="color:#a12a2a">현황을 불러오지 못했습니다. 금융소득이 0원이라는 뜻이 아닙니다.</p>'; return; }
+    renderOverview(await res.json());
+  } catch (err) {
+    ovEl.innerHTML = '<p style="color:#a12a2a">서버에 연결하지 못했습니다: ' + esc(err.message) + '</p>';
+  }
+}
 
 function renderMeta(a) {
   const parts = [];
@@ -166,6 +279,7 @@ function renderMeta(a) {
   }
 
   const kv = [];
+  if (a.ruleVersion) kv.push(`<div class="kv"><span>적용 규칙</span><span style="text-align:right">${esc(a.ruleVersion)}</span></div>`);
   if (a.tokens) kv.push(`<div class="kv"><span>토큰</span><span>prompt ${a.tokens.prompt} · completion ${a.tokens.completion}</span></div>`);
   if (a.latencyMs != null) kv.push(`<div class="kv"><span>지연</span><span>${a.latencyMs}ms</span></div>`);
   if (kv.length) parts.push('<section>' + kv.join('') + '</section>');
@@ -176,6 +290,23 @@ function renderMeta(a) {
   }
 
   meta.innerHTML = parts.join('') || '<p class="empty">표시할 메타데이터가 없습니다.</p>';
+}
+
+// 신청 미리보기 — 버튼은 "신청합니다"/"아니요"를 보내는 것뿐이다. 실행 여부는 서버가 판단한다.
+function previewCard(p) {
+  const box = document.createElement('div');
+  box.className = 'preview';
+  box.innerHTML = `<b>${esc(p.productLabel)}</b> 자격 확인 신청 미리보기` +
+    (p.mock ? ' <span class="chip unknown">실습용 · 실제 가입 아님</span>' : '') +
+    `<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(p.howToConfirm ?? '')}</div>` +
+    '<div class="actions"><button type="button" data-a="신청합니다">신청합니다</button>' +
+    '<button type="button" class="ghost" data-a="아니요">아니요</button></div>';
+  box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    box.querySelectorAll('button').forEach(x => x.disabled = true);
+    input.value = b.dataset.a;
+    form.requestSubmit();
+  }));
+  return box;
 }
 
 form.addEventListener('submit', async e => {
@@ -189,7 +320,7 @@ form.addEventListener('submit', async e => {
   const out = bubble('bot', '…');
 
   try {
-    const res = await fetch('/chat', {
+    const res = await fetch(api('/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -205,6 +336,13 @@ form.addEventListener('submit', async e => {
 
     const a = await res.json();
     out.textContent = a.answer ?? '';
+    if (a.notices?.length) {
+      const n = document.createElement('div');
+      n.className = 'notice';
+      n.innerHTML = '<ul>' + a.notices.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>';
+      out.appendChild(n);
+    }
+    if (a.pendingAction) out.appendChild(previewCard(a.pendingAction));
     if (a.disclaimer) {
       const d = document.createElement('div');
       d.className = 'disclaimer';
@@ -215,6 +353,8 @@ form.addEventListener('submit', async e => {
   } catch (err) {
     out.textContent = '서버에 연결하지 못했습니다: ' + err.message;
   } finally {
+    // 대화에서 말한 타사 금액은 서버가 답변 생성 전에 저장한다. 답변이 실패해도 현황은 다시 읽는다.
+    loadOverview();
     send.disabled = false;
     input.focus();
     log.scrollTop = log.scrollHeight;
@@ -222,10 +362,11 @@ form.addEventListener('submit', async e => {
 });
 
 // 로그인 상태 표시 — Basic 인증이라 /chat 401 여부로 판단한다.
-fetch('/chat', { method: 'POST', headers: {'Content-Type':'application/json'},
+fetch(api('/chat'), { method: 'POST', headers: {'Content-Type':'application/json'},
                  credentials: 'include', body: '{"question":"","conversationId":"probe"}' })
   .then(r => { document.getElementById('who').textContent = r.status === 401 ? '로그인 필요' : '로그인됨'; })
   .catch(() => {});
+loadOverview();
 </script>
 </body>
 </html>

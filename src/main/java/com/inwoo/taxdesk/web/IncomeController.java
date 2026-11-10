@@ -5,6 +5,9 @@ import com.inwoo.taxdesk.config.TaxDeskProperties;
 import com.inwoo.taxdesk.tools.AccountIncomeTools;
 import com.inwoo.taxdesk.tools.ToolUser;
 import java.security.Principal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,6 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/income")
 public class IncomeController {
+
+    private static final Logger log = LoggerFactory.getLogger(IncomeController.class);
 
     private final AccountIncomeTools incomeTools;
     private final ConversationState state;
@@ -38,6 +43,12 @@ public class IncomeController {
         int y = year == null ? props.taxYear() : year;
         Long external = conversationId == null || conversationId.isBlank() ? null
                 : state.get(principal.getName() + ":" + conversationId).externalAmount();
-        return incomeTools.overview(y, new ToolContext(ToolUser.contextOf(principal.getName())), external);
+        try {
+            return incomeTools.overview(y, new ToolContext(ToolUser.contextOf(principal.getName())), external);
+        } catch (DataAccessException e) {
+            // 조회 실패를 500 으로 끝내면 화면은 "0원"과 구별할 방법이 없다. 상태로 돌려준다.
+            log.error("금융소득 현황 조회 실패: {}", e.toString());
+            return AccountIncomeTools.failed(y, external);
+        }
     }
 }

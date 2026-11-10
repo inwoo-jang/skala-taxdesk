@@ -60,6 +60,44 @@ class AccountIncomeToolsTest {
         assertThat(tools.overview(2026, ctx("isabu"), 5_000_000L).externalStatus()).isEqualTo("DECLARED");
     }
 
+    @Test
+    @DisplayName("현황 — 합계·제외분·상품별 행을 싣고 계좌번호는 가린다")
+    void overviewCarriesTotalsAndMaskedItems() {
+        when(repo.findByOwnerIdAndYear("isabu", 2026)).thenReturn(List.of(
+                row("하나은행", IncomeSource.LINKED, IncomeType.INTEREST, 9_128_440L, 1_277_980L, TaxTreatment.TAXABLE),
+                row("SKALA증권", IncomeSource.OWN_ACCOUNT, IncomeType.INTEREST, 4_000_000L, 0L, TaxTreatment.TAX_FREE)));
+
+        var o = tools.overview(2026, ctx("isabu"), null);
+
+        assertThat(o.lookupStatus()).isEqualTo(AccountIncomeTools.LOOKUP_OK);
+        assertThat(o.taxableTotal()).isEqualTo(9_128_440L);
+        assertThat(o.excludedTotal()).isEqualTo(4_000_000L);
+        assertThat(o.items()).hasSize(2);
+        assertThat(o.items()).allMatch(i -> !i.accountNo().contains("123456"));
+    }
+
+    @Test
+    @DisplayName("현황 — 행이 없으면 '0원'이 아니라 NO_DATA 다")
+    void overviewWithoutRowsIsNoData() {
+        when(repo.findByOwnerIdAndYear("isabu", 2026)).thenReturn(List.of());
+
+        var o = tools.overview(2026, ctx("isabu"), null);
+
+        assertThat(o.lookupStatus()).isEqualTo(AccountIncomeTools.LOOKUP_NO_DATA);
+        assertThat(o.notes()).anyMatch(n -> n.contains("자료가 없습니다"));
+    }
+
+    @Test
+    @DisplayName("현황 — 조회 실패는 FAILED 로 돌려주고 금액을 확인된 값처럼 싣지 않는다")
+    void failedOverview() {
+        var o = AccountIncomeTools.failed(2026, 0L);
+
+        assertThat(o.lookupStatus()).isEqualTo(AccountIncomeTools.LOOKUP_FAILED);
+        assertThat(o.institutions()).isEmpty();
+        assertThat(o.externalStatus()).isEqualTo("DECLARED_ZERO");
+        assertThat(o.notes()).anyMatch(n -> n.contains("0원이라는 뜻이 아니며"));
+    }
+
     private static ToolContext ctx(String user) {
         return new ToolContext(ToolUser.contextOf(user));
     }

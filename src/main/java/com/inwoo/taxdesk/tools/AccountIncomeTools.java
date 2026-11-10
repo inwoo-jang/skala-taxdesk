@@ -66,17 +66,7 @@ public class AccountIncomeTools {
                 .filter(r -> !r.countsTowardThreshold())
                 .mapToLong(AccountIncome::getAmount).sum();
 
-        List<Item> items = rows.stream()
-                .map(r -> new Item(
-                        r.getInstitution(),
-                        Masker.maskAccountNo(r.getAccountNo()),
-                        r.getProductName(),
-                        r.getType(),
-                        r.getTreatment(),
-                        r.getSource().name(),
-                        r.getAmount(),
-                        r.getWithheldTax()))
-                .toList();
+        List<Item> items = rows.stream().map(AccountIncomeTools::item).toList();
 
         return new IncomeSummary(year, interest, domestic, foreign,
                 interest + domestic + foreign, excluded, withheld, excludedWithheld, items);
@@ -116,26 +106,62 @@ public class AccountIncomeTools {
                     .mapToLong(AccountIncome::getAmount).sum());
         }
 
-        String externalStatus = externalDeclared == null ? "UNKNOWN"
-                : externalDeclared == 0 ? "DECLARED_ZERO" : "DECLARED";
+        String externalStatus = externalStatusOf(externalDeclared);
+        String lookupStatus = rows.isEmpty() ? LOOKUP_NO_DATA : LOOKUP_OK;
+
+        long taxableTotal = rows.stream().filter(AccountIncome::countsTowardThreshold)
+                .mapToLong(AccountIncome::getAmount).sum();
+        long excludedTotal = rows.stream().filter(r -> !r.countsTowardThreshold())
+                .mapToLong(AccountIncome::getAmount).sum();
+        List<Item> items = rows.stream().map(AccountIncomeTools::item).toList();
 
         List<String> notes = new ArrayList<>();
+        if (rows.isEmpty()) {
+            // 조회는 성공했지만 행이 없다. "확인된 0원"이 아니라 "이 범위에 자료가 없다"이다.
+            notes.add("%d년 귀속으로 조회된 자사·연동 기관 금융소득 자료가 없습니다. 지급이 없었는지, 아직 반영되지 않았는지는 이 자료로 알 수 없습니다."
+                    .formatted(year));
+        }
         notes.add("자사(OWN_ACCOUNT)와 마이데이터 연동(LINKED) 기관의 자료만 포함됩니다. "
                 + "연동되지 않은 기관은 여기 나타나지 않으며, 그 기관의 소득이 0원이라는 뜻이 아닙니다.");
         notes.add("금액은 조회 시점까지 확인된 지급분입니다. 연말까지 추가 지급이 있으면 달라집니다.");
-        if (externalDeclared == null) {
-            notes.add("타사(미연동) 금융소득은 아직 확인되지 않았습니다. 없으면 \"타사 소득 없어요\"라고 알려 주세요.");
-        } else {
-            notes.add("타사 금융소득 %,d원은 고객님이 알려주신 값이며 저희가 확인한 값이 아닙니다."
-                    .formatted(externalDeclared));
-        }
+        notes.add(externalNote(externalDeclared));
 
-        return new IncomeOverview(year, LocalDate.now(),
+        return new IncomeOverview(year, LocalDate.now(), lookupStatus, taxableTotal, excludedTotal,
                 List.copyOf(byInstitution.values()), byType, byTreatment,
                 externalDeclared, externalStatus,
                 rows.stream().filter(r -> r.getSource() == IncomeSource.LINKED)
                         .map(AccountIncome::getInstitution).distinct().toList(),
-                notes);
+                items, notes);
+    }
+
+    /**
+     * 조회 자체가 실패했을 때의 현황. 금액 칸은 0 이 아니라 "모름"이다 — 화면은 {@code lookupStatus} 를 먼저 본다.
+     */
+    public static IncomeOverview failed(int year, Long externalDeclared) {
+        return new IncomeOverview(year, LocalDate.now(), LOOKUP_FAILED, 0L, 0L, List.of(), Map.of(), Map.of(),
+                externalDeclared, externalStatusOf(externalDeclared), List.of(), List.of(),
+                List.of("계좌 자료 조회에 실패했습니다. 금융소득이 0원이라는 뜻이 아니며, 잠시 후 다시 확인해 주세요.",
+                        externalNote(externalDeclared)));
+    }
+
+    public static final String LOOKUP_OK = "OK";
+    public static final String LOOKUP_NO_DATA = "NO_DATA";
+    public static final String LOOKUP_FAILED = "FAILED";
+
+    private static String externalStatusOf(Long externalDeclared) {
+        return externalDeclared == null ? "UNKNOWN" : externalDeclared == 0 ? "DECLARED_ZERO" : "DECLARED";
+    }
+
+    private static String externalNote(Long externalDeclared) {
+        return externalDeclared == null
+                ? "타사(미연동) 금융소득은 아직 확인되지 않았습니다. 없으면 상담창에 \"타사 소득 없어요\"라고 알려 주세요."
+                : "타사 금융소득 %,d원은 고객님이 알려주신 값이며 저희가 확인한 값이 아닙니다. 위 연동 기관의 소득이 그 금액에 포함돼 있지 않은지 확인해 주세요."
+                        .formatted(externalDeclared);
+    }
+
+    private static Item item(AccountIncome r) {
+        return new Item(r.getInstitution(), Masker.maskAccountNo(r.getAccountNo()), r.getProductName(),
+                r.getType(), r.getTreatment(), r.getSource().name(), r.getAmount(), r.getWithheldTax());
     }
 
     private static long sum(List<AccountIncome> rows, IncomeType type, boolean taxableOnly) {
@@ -179,20 +205,28 @@ public class AccountIncomeTools {
     }
 
     /**
+     * @param lookupStatus    OK · NO_DATA(조회 성공, 자료 없음) · FAILED(조회 실패 — 금액은 모름)
+     * @param taxableTotal    종합과세 판정에 들어가는 자사·연동 합계 (타사 제외)
+     * @param excludedTotal   비과세·분리과세로 판정에서 빠진 금액
      * @param byType          과세대상 금액을 유형별로 (INTEREST / DOMESTIC_DIVIDEND / FOREIGN_DIVIDEND)
      * @param byTreatment     전 행을 과세구분별로 (TAXABLE / TAX_FREE / SEPARATE)
      * @param externalDeclared 고객이 말한 타사 금액. {@code null} = 미확인
      * @param externalStatus  UNKNOWN · DECLARED_ZERO · DECLARED
      * @param linkedInstitutions 연동으로 자료가 들어온 기관명 — 수기 입력과의 중복 확인에 쓴다
+     * @param items           상품별 행. 계좌번호는 가려져 있다
      */
     public record IncomeOverview(int year,
                                  LocalDate asOf,
+                                 String lookupStatus,
+                                 long taxableTotal,
+                                 long excludedTotal,
                                  List<InstitutionLine> institutions,
                                  Map<String, Long> byType,
                                  Map<String, Long> byTreatment,
                                  Long externalDeclared,
                                  String externalStatus,
                                  List<String> linkedInstitutions,
+                                 List<Item> items,
                                  List<String> notes) {
     }
 }
